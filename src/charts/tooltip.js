@@ -571,6 +571,21 @@ define(function(require){
         };
 
         /**
+         * Gets or Sets the tooltipOffset
+         * @param  {x,y} _x Desired tooltipOffset
+         * @return { {x,y} | module} Current tooltipOffset or module to chain calls
+         * @public
+         */
+        exports.tooltipOffset = function(newTooltipOffset) {
+            if (!arguments.length) {
+                return tooltipOffset;
+            }
+            tooltipOffset = newTooltipOffset;
+
+            return this;
+        };
+
+        /**
          * Exposes the ability to force the tooltip to use a certain date format
          * @param  {String} _x Desired format
          * @return { (String|Module) }    Current format or module to chain calls
