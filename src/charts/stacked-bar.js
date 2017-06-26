@@ -584,7 +584,7 @@ define(function(require){
          */
 
         function getNearestDataPoint2(mouseY) {
-            let adjustedMouseY = mouseY - margin.bottom,
+            let adjustedMouseY = mouseY - margin.top,
                 epsilon = yScale.bandwidth(),
                 nearest;
 
