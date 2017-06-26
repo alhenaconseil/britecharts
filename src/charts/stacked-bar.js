@@ -607,7 +607,7 @@ define(function(require){
          * @return {obj}            Data entry that is closer to that y axis position
          */
         function getNearestDataPoint2(mouseY) {
-            let adjustedMouseY = mouseY - margin.bottom,
+            let adjustedMouseY = mouseY - margin.top,
                 epsilon = yScale.bandwidth(),
                 nearest;
 
