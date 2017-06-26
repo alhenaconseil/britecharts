@@ -81,8 +81,10 @@ define(function(require){
             marginRatio = 1.5,
 
             valueReservedSpace = 40,
+            isPercentage = true,
             numberLetterSpacing = 0.8,
-            numberFormat = 's',
+            numberFormatSpecifier = 's',
+            numberFormat = d3Format.format(numberFormatSpecifier),
 
             isFadedClassName = 'is-faded',
             isHorizontal = false,
@@ -93,7 +95,13 @@ define(function(require){
 
             getId = ({id}) => id,
             getName = ({name}) => name,
-            getFormattedQuantity = ({quantity}) => d3Format.format(numberFormat)(quantity),
+            getFormattedQuantity = ({quantity}) => {
+                if (isPercentage) {
+                    return numberFormat(quantity) + '%';
+                } else {
+                    return numberFormat(quantity);
+                }
+            },
             getCircleFill = ({name}) => colorScale(name),
 
             entries,
@@ -440,7 +448,7 @@ define(function(require){
          * @param  {number} _x Desired horizontal direction for the chart
          * @return { isHorizontal | module} If it is horizontal or module to chain calls
          * @deprecated
-         */        
+         */
         exports.horizontal = function (_x) {
             if (!arguments.length) {
                 return isHorizontal;
@@ -500,16 +508,32 @@ define(function(require){
         };
 
         /**
-         * Gets or Sets the number format of the legend chart
-         * @param  {string} _x Desired number format for the legend chart
-         * @return {numberFormat | module} Current number format or Legend module to chain calls
+         * Gets or Sets the percentage type
+         * @param  {boolean} _x Desired isPercentage state
+         * @return {boolean | module} Current isPercentage state or Legend module to chain calls
          * @public
          */
-        exports.numberFormat = function(_x) {
+        exports.isPercentage = function(newIsPercentage) {
             if (!arguments.length) {
-                return numberFormat;
+                return isPercentage;
             }
-            numberFormat = _x;
+            isPercentage = newIsPercentage;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the number format of the legend chart
+         * @param  {string} _x Desired d3 number format for the graph
+         * @return {string | module} Current d3 number format or Legend module to chain calls
+         * @public
+         */
+        exports.numberFormatSpecifier = function(specifier) {
+            if (!arguments.length) {
+                return numberFormatSpecifier;
+            }
+            numberFormatSpecifier = specifier;
+            numberFormat = d3Format.format(numberFormatSpecifier);
 
             return this;
         };
