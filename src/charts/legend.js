@@ -81,7 +81,7 @@ define(function(require){
             marginRatio = 1.5,
 
             valueReservedSpace = 40,
-            isPercentage = true,
+            suffix = '',
             numberLetterSpacing = 0.8,
             numberFormatSpecifier = 's',
             numberFormat = d3Format.format(numberFormatSpecifier),
@@ -96,11 +96,7 @@ define(function(require){
             getId = ({id}) => id,
             getName = ({name}) => name,
             getFormattedQuantity = ({quantity}) => {
-                if (isPercentage) {
-                    return numberFormat(quantity) + '%';
-                } else {
-                    return numberFormat(quantity);
-                }
+                return numberFormat(quantity) + ' ' + suffix;
             },
             getCircleFill = ({name}) => colorScale(name),
 
@@ -508,16 +504,16 @@ define(function(require){
         };
 
         /**
-         * Gets or Sets the percentage type
-         * @param  {boolean} _x Desired isPercentage state
-         * @return {boolean | module} Current isPercentage state or Legend module to chain calls
+         * Gets or Sets the suffix
+         * @param  {boolean} _x Desired suffix
+         * @return {boolean | module} Current suffix or Legend module to chain calls
          * @public
          */
-        exports.isPercentage = function(newIsPercentage) {
+        exports.suffix = function(newSuffix) {
             if (!arguments.length) {
-                return isPercentage;
+                return suffix;
             }
-            isPercentage = newIsPercentage;
+            suffix = newSuffix;
 
             return this;
         };
