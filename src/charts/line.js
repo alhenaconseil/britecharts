@@ -11,6 +11,7 @@ define(function(require){
     const d3Selection = require('d3-selection');
     const d3Transition = require('d3-transition');
     const d3TimeFormat = require('d3-time-format');
+    const uniqueId = require('lodash.uniqueid')
 
     const {exportChart} = require('./helpers/exportChart');
     const colorHelper = require('./helpers/colors');
@@ -140,6 +141,7 @@ define(function(require){
             tickPadding = 5,
             colorSchema = colorHelper.colorSchemas.britecharts,
             singleLineGradientColors = colorHelper.colorGradients.greenBlue,
+            lineGradientIdCustomized = uniqueId(lineGradientId),
             topicColorMap,
 
             xAxisFormat = null,
@@ -332,7 +334,7 @@ define(function(require){
         function buildGradient() {
             svg.select('.metadata-group')
               .append('linearGradient')
-                .attr('id', lineGradientId)
+                .attr('id', lineGradientIdCustomized)
                 .attr('x1', '0%')
                 .attr('y1', '0%')
                 .attr('x2', '100%')
@@ -531,7 +533,7 @@ define(function(require){
                 .attr('class', 'line')
                 .attr('d', ({dates}) => topicLine(dates))
                 .style('stroke', (d) => (
-                    dataByTopic.length === 1 ? `url(#${lineGradientId})` : getLineColor(d)
+                    dataByTopic.length === 1 ? `url(#${lineGradientIdCustomized})` : getLineColor(d)
                 ));
 
             lines
