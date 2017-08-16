@@ -141,7 +141,7 @@ define(function(require){
             tickPadding = 5,
             colorSchema = colorHelper.colorSchemas.britecharts,
             singleLineGradientColors = colorHelper.colorGradients.greenBlue,
-            lineGradientIdCustomized = uniqueId(lineGradientId),
+            lineGradientUniqueId = uniqueId(lineGradientId),
             topicColorMap,
 
             xAxisFormat = null,
@@ -334,7 +334,7 @@ define(function(require){
         function buildGradient() {
             svg.select('.metadata-group')
               .append('linearGradient')
-                .attr('id', lineGradientIdCustomized)
+                .attr('id', lineGradientUniqueId)
                 .attr('x1', '0%')
                 .attr('y1', '0%')
                 .attr('x2', '100%')
@@ -533,7 +533,7 @@ define(function(require){
                 .attr('class', 'line')
                 .attr('d', ({dates}) => topicLine(dates))
                 .style('stroke', (d) => (
-                    dataByTopic.length === 1 ? `url(#${lineGradientIdCustomized})` : getLineColor(d)
+                    dataByTopic.length === 1 ? `url(#${lineGradientUniqueId})` : getLineColor(d)
                 ));
 
             lines
