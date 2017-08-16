@@ -24,7 +24,7 @@ define([
         describe('Line Chart', () => {
             let dataset, containerFixture, f, lineChart;
 
-            xdescribe('when a single line', function() {
+            describe('when a single line', function() {
 
                 beforeEach(() => {
                     dataset = aTestDataSet().withOneSource().build();
@@ -48,10 +48,10 @@ define([
 
                 describe('on render', () => {
 
-                    it('should have a gradient stroke on the chart line', () => {
+                    it('should have a unique gradient stroke on the chart line', () => {
                         let stroke = containerFixture.select('.chart-group').selectAll('path').node().style.stroke;
 
-                        expect(stroke).toEqual('url("#lineGradientId")')
+                        expect(stroke).toEqual(jasmine.stringMatching(/^url\("#lineGradientId[0-9]+"\)$/));
                     });
                 });
             });
