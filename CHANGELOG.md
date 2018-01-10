@@ -1,4 +1,128 @@
-2.0.0
+
+2.4.11 - Minor
+--------------
+Features:
+* Added loading states (@amber-eb)
+* Added betweenBarsPadding option to bar charts
+* Docs update with demos in frontpage and more tweaks
+* Doc update for data format (@interdigitize)
+* Custom click handler in bar chart (@dalerasrorov-eb)
+* Custom click handler in donut chart (@dalerasrorov-eb)
+
+Bug fixes:
+* Fixed brush drag and drop (@brandon-vaughan)
+
+2.4.9 - Patch
+--------------
+Features:
+* Added donut chart empty state (@amber-eb)
+* Additional donut configurations (@amber-eb)
+
+2.4.7 - Patch
+--------------
+Features:
+* Docs build on release
+
+2.4.4 - Patch
+--------------
+Bug fixes:
+* Added style build to build process
+
+2.4.3 - Patch
+--------------
+Bug fixes:
+* Defensive check on text helper
+
+2.4.0 - Minor
+--------------
+Features:
+* Added glow in highlight points of line and area charts
+* Added Donut and line chart number formatting (@dalerasrorov-eb)
+* Legend adjustments (@jchen-eb)
+
+Bug fixes:
+* Removed transition from yAxis (@CoryDuncan)
+* Fixes line chart not rendering gradient on unique line constant values
+* Stacked Area x line fix (@jchen-eb)
+
+2.3.2 - Patch
+--------------
+Features:
+* Added ordering in bar chart (@dalerasrorov-eb)
+* Added optional axis labels to line chart
+
+Bug fixes:
+* Fixed Tick calculation (@jchen-eb)
+* Fixed Sparkline for multiple instances (@amber-eb)
+* Fixed broken link in docs
+
+2.3.1 - Patch
+--------------
+Features:
+* Ability to set sort order for donut (@dalerasrorov-eb)
+* Getter/setter for marginRatio-Legend and tooltipOffset-Stacked Area
+* Tooltip title improvements (@rpheath)
+
+2.2.0
+
+2.1.1 - Patch
+--------------
+Features:
+* Added barchart padding
+
+Bug fixes:
+* Fixed IE11 tooltip bug
+
+2.1.0 - Minor
+---------------------
+Features:
+* Added interactivity to highlight points in line and area charts
+* Added skeleton for docs rework
+
+Bug fixes:
+* Fixed stacked area, ste, sparkline and line chart reload
+* Fixed step chart label rotation
+* Fixed donut slice highlighting
+* Updated cleanData functions to not override custom properties in data
+
+2.0.4 - Patch
+---------------------
+Bug Fixes:
+* Check for window in export chart file
+
+2.0.3 - Patch
+---------------------
+Features:
+* Moved into Webpack 3 (thanks @rwholey)
+* Allow empty data on Stacked Area (thanks @jaylumChen)
+* Added Outline to Stacked Area Chart (thanks @jaylumChen)
+* Added locale to brush and stacked bar charts (thanks @martinmanzo)
+* Added Ytick text offset to grouped bar chart (thanks @martinmanzo)
+
+Bug Fixes:
+* Fixed Donut + Legend bug
+* Fixed data reload on stacked bar chart and grouped bar chart
+* Updated docs, Donut demo and CDN links
+
+2.0.2 - Failed release
+
+2.0.1 - Patch
+---------------------
+Bug Fixes:
+* Fixed missing transitions on grouped bar chart and stacked area (thanks @martinmanzo)
+* Moved into Yarn (thanks @rwholey)
+* Fixed color schema not being updated on bar charts (thanks @biovisualize)
+* Fixed object cleaning on bar chart (thanks @jaylumChen)
+* Fixed data reload on Donut charts
+* Fixed Firefox markup issues
+* Added Twitter link on docs
+* Fixed CDN demo page on docs
+
+Features:
+* Created first version of the Britecharts sandbox (thanks @rwholey)
+* Added curve interpolation attribute to line chart (thanks @dylanmoz)
+
+
 [2.0.0][https://github.com/eventbrite/britecharts/compare/1.7.2...2.0.0] - Major Release
 -----------------
 

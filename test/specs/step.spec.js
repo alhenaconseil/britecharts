@@ -1,17 +1,28 @@
-define(['jquery', 'd3', 'step', 'stepChartDataBuilder'], function($, d3, chart, dataBuilder) {
+define([
+    'jquery', 
+    'd3', 
+    'step', 
+    'stepChartDataBuilder'
+], function(
+    $, 
+    d3, 
+    chart, 
+    dataBuilder
+) {
     'use strict';
 
-    describe('Step Chart Test Suite', () => {
+    const aTestDataSet = () => new dataBuilder.StepDataBuilder();    
+    const buildDataSet = (dataSetName) => {
+        return aTestDataSet()
+            [dataSetName]()
+            .build();
+    };
+
+    describe('Step Chart', () => {
         let stepChart, dataset, containerFixture, f;
 
-        function aTestDataSet() {
-            return new dataBuilder.StepDataBuilder();
-        }
-
         beforeEach(() => {
-            dataset = aTestDataSet()
-                .withSmallData()
-                .build();
+            dataset = buildDataSet('withSmallData');
             stepChart = chart();
 
             // DOM Fixture Setup
@@ -60,6 +71,33 @@ define(['jquery', 'd3', 'step', 'stepChartDataBuilder'], function($, d3, chart, 
             expect(containerFixture.selectAll('.step').size()).toEqual(numSteps);
         });
 
+        describe('when reloading with a different dataset', () => {
+            
+            it('should render in the same svg', function() {
+                let actual;
+                let expected = 1;
+                let newDataset = buildDataSet('withMediumData');
+
+                containerFixture.datum(newDataset.data).call(stepChart);
+
+                actual = containerFixture.selectAll('.step-chart').nodes().length;
+
+                expect(actual).toEqual(expected);
+            });
+
+            it('should render nine steps', function() {
+                let actual;
+                let expected = 9;
+                let newDataset = buildDataSet('withMediumData');
+
+                containerFixture.datum(newDataset.data).call(stepChart);
+
+                actual = containerFixture.selectAll('.step-chart .step').nodes().length;
+
+                expect(actual).toEqual(expected);
+            });
+        });
+
         describe('API', function() {
 
             it('should provide margin getter and setter', () => {
@@ -93,6 +131,18 @@ define(['jquery', 'd3', 'step', 'stepChartDataBuilder'], function($, d3, chart, 
 
                 stepChart.yTicks(expected);
                 actual = stepChart.yTicks();
+
+                expect(previous).not.toBe(actual);
+                expect(actual).toBe(expected);
+            });
+
+            it('should provide loadingState getter and setter', () => {
+                let previous = stepChart.loadingState(),
+                    expected = 'test',
+                    actual;
+
+                stepChart.loadingState(expected);
+                actual = stepChart.loadingState();
 
                 expect(previous).not.toBe(actual);
                 expect(actual).toBe(expected);

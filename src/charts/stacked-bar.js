@@ -16,6 +16,8 @@ define(function(require){
 
     const {exportChart} = require('./helpers/exportChart');
     const colorHelper = require('./helpers/colors');
+    const {bar} = require('./helpers/loadingStates');
+
     const NUMBER_FORMAT = ',f';
     const uniq = (arrArg) => arrArg.filter((elem, pos, arr) => arr.indexOf(elem) == pos);
 
@@ -27,22 +29,19 @@ define(function(require){
 
     /**
      * @typedef stackedBarData
-     * @type {Object}
-     * @property {Object[]} data       All data entries
+     * @type {Object[]}
      * @property {String} name         Name of the entry
      * @property {String} stack        Stack of the entry
      * @property {Number} value        Value of the entry
      *
      * @example
-     * {
-     *     'data': [
-     *         {
-     *             "name": "2011-01",
-     *             "stack": "Direct",
-     *             "value": 0
-     *         }
-     *     ]
-     * }
+     * [
+     *     {
+     *         "name": "2011-01",
+     *         "stack": "Direct",
+     *         "value": 0
+     *     }
+     * ]
      */
 
     /**
@@ -68,13 +67,15 @@ define(function(require){
     return function module() {
 
         let margin = {
-            top: 40,
-            right: 30,
-            bottom: 60,
-            left: 70
+                top: 40,
+                right: 30,
+                bottom: 60,
+                left: 70
             },
             width = 960,
             height = 500,
+            loadingState = bar,
+
 
             xScale,
             xAxis,
@@ -82,9 +83,12 @@ define(function(require){
             yAxis,
 
             aspectRatio = null,
+            betweenBarsPadding = 0.1,
 
             yTickTextYOffset = -8,
             yTickTextXOffset = -20,
+
+            locale,
 
             yTicks = 5,
             xTicks = 5,
@@ -105,6 +109,7 @@ define(function(require){
             data,
             transformedData,
             stacks,
+            layerElements,
 
             tooltipThreshold = 480,
 
@@ -116,6 +121,7 @@ define(function(require){
                 right: 0
             },
             maxBarNumber = 8,
+            barOpacity = 0.24,
 
             animationDelayStep = 20,
             animationDelays = d3Array.range(animationDelayStep, maxBarNumber* animationDelayStep, animationDelayStep),
@@ -276,12 +282,12 @@ define(function(require){
                 yScale = d3Scale.scaleBand()
                     .domain(data.map(getName))
                     .rangeRound([chartHeight, 0])
-                    .padding(0.1);
+                    .padding(betweenBarsPadding);
             } else {
                 xScale = d3Scale.scaleBand()
                     .domain(data.map(getName))
                     .rangeRound([0, chartWidth ])
-                    .padding(0.1);
+                    .padding(betweenBarsPadding);
 
                 yScale = d3Scale.scaleLinear()
                     .domain([0,yMax])
@@ -326,19 +332,21 @@ define(function(require){
         }
 
         /**
-         * Parses dates and values into JS Date objects and numbers
-         * @param  {obj} data Raw data from JSON file
-         * @return {obj}      Parsed data with values and dates
+         * Cleaning data casting the values, stacks, names and topic names to the proper type while keeping
+         * the rest of properties on the data
+         * @param  {stackedBarData} originalData   Raw data from the container
+         * @return {stackedBarData}                Parsed data with values and dates
+         * @private
          */
-        function cleanData(data) {
-            return data.map((d) => {
+        function cleanData(originalData) {
+            return originalData.reduce((acc, d) => {
                     d.value = +d[valueLabel];
                     d.stack = d[stackLabel];
                     d.topicName = getStack(d); // for tooltip
                     d.name = d[nameLabel];
 
-                    return d;
-                });
+                    return [...acc, d];
+                }, []);
         }
 
         /**
@@ -409,46 +417,42 @@ define(function(require){
 
         /**
          * Draws the bars along the x axis
-         * @param  {D3Selection} bars Selection of bars
+         * @param  {D3Selection} layersSelection Selection of bars
          * @return {void}
          */
-        function drawHorizontalBars(series) {
+        function drawHorizontalBars(layersSelection) {
+            let layerJoin = layersSelection
+                .data(layers);
+
+            layerElements = layerJoin
+                .enter()
+                  .append('g')
+                    .attr('fill', (({key}) => categoryColorMap[key]))
+                    .classed('layer', true);
+
+            let barJoin = layerElements
+                .selectAll('.bar')
+                .data((d) => d);
+
             // Enter + Update
-            let context,
-                bars = series
-                    .data(layers)
+            let bars = barJoin
                     .enter()
-                      .append('g')
-                        .classed('layer', true)
-                        .attr('fill', (({key}) => categoryColorMap[key]))
-                        .selectAll('.bar')
-                        .data( (d)=> d)
-                        .enter()
-                          .append('rect')
-                            .classed('bar', true)
-                            .attr('x', (d) => xScale(d[0]) )
-                            .attr('y', (d) => yScale(d.data.key) )
-                            .attr('height', yScale.bandwidth())
-                            .attr('fill', (({data}) => categoryColorMap[data.stack+data.key]));
+                      .append('rect')
+                        .classed('bar', true)
+                        .attr('x', (d) => xScale(d[0]) )
+                        .attr('y', (d) => yScale(d.data.key) )
+                        .attr('height', yScale.bandwidth())
+                        .attr('fill', (({data}) => categoryColorMap[`${data.stack}${data.key}`]));
 
             if (isAnimated) {
-                bars.style('opacity', 0.24)
+                bars.style('opacity', barOpacity)
                     .transition()
                     .delay((_, i) => animationDelays[i])
                     .duration(animationDuration)
                     .ease(ease)
-                    .tween('attr.width', function(d) {
-                        let node = d3Selection.select(this),
-                            i = d3Interpolate.interpolateRound(0, xScale(d[1] - d[0])),
-                            j = d3Interpolate.interpolateNumber(0,1);
-
-                        return function(t) {
-                            node.attr('width',  i(t) );
-                            node.style('opacity', j(t) );
-                        };
-                    });
+                    .tween('attr.width', horizontalBarsTween);
             } else {
-                bars.attr('width', (d) => xScale(d[1] - d[0] ) )
+                bars.attr('width', (d) => xScale(d[1] - d[0]));
             }
         }
 
@@ -471,44 +475,42 @@ define(function(require){
 
         /**
          * Draws the bars along the y axis
-         * @param  {D3Selection} bars Selection of bars
+         * @param  {D3Selection} layersSelection Selection of bars
          * @return {void}
          */
-        function drawVerticalBars(series) {
-            // Enter + Update
-            let bars = series
-                .data(layers)
+        function drawVerticalBars(layersSelection) {
+            let layerJoin = layersSelection
+                .data(layers);
+
+            layerElements = layerJoin
                 .enter()
                   .append('g')
-                    .classed('layer', true)
                     .attr('fill', (({key}) => categoryColorMap[key]))
+                    .classed('layer', true);
+
+            let barJoin = layerElements
                     .selectAll('.bar')
-                    .data((d) => d)
+                    .data((d) => d);
+
+            // Enter + Update
+            let bars = barJoin
                     .enter()
                       .append('rect')
                         .classed('bar', true)
                         .attr('x', (d) => xScale(d.data.key))
                         .attr('y', (d) => yScale(d[1]))
                         .attr('width', xScale.bandwidth )
-                        .attr('fill', (({data}) => categoryColorMap[data.stack+data.key])),context;
+                        .attr('fill', (({data}) => categoryColorMap[`${data.stack}${data.key}`]));
 
             if (isAnimated) {
-                bars.style('opacity', 0.24).transition()
-                    .delay( (_, i) => animationDelays[i])
+                bars.style('opacity', barOpacity)
+                    .transition()
+                    .delay((_, i) => animationDelays[i])
                     .duration(animationDuration)
                     .ease(ease)
-                    .tween('attr.height', function(d) {
-                        let node = d3Selection.select(this),
-                            i = d3Interpolate.interpolateRound(0, yScale(d[0]) - yScale(d[1])),
-                            j = d3Interpolate.interpolateNumber(0,1);
-
-                        return function(t) {
-                            node.attr('height',  i(t) );
-                            node.style('opacity', j(t) );
-                        };
-                    });
+                    .tween('attr.height', verticalBarsTween);
             } else {
-                bars.attr('height', (d) => yScale(d[0]) - yScale(d[1]) );
+                bars.attr('height', (d) => yScale(d[0]) - yScale(d[1]));
             }
         }
 
@@ -534,6 +536,11 @@ define(function(require){
          * @private
          */
         function drawStackedBar(){
+            // Not ideal, we need to figure out how to call exit for nested elements
+            if (layerElements) {
+                svg.selectAll('.layer').remove();
+            }
+
             let series = svg.select('.chart-group').selectAll('.layer')
 
             if (isHorizontal) {
@@ -624,7 +631,7 @@ define(function(require){
          * and updates metadata related to it
          * @private
          */
-        function handleMouseMove(e, d){
+        function handleMouseMove(e){
             let [mouseX, mouseY] = getMousePosition(e),
                 dataPoint = isHorizontal ? getNearestDataPoint2(mouseY) : getNearestDataPoint(mouseX),
                 x,
@@ -660,9 +667,25 @@ define(function(require){
          * Mouseover handler, shows overlay and adds active class to verticalMarkerLine
          * @private
          */
-         function handleMouseOver(e, d) {
-             dispatcher.call('customMouseOver', e, d, d3Selection.mouse(e));
-         }
+        function handleMouseOver(e, d) {
+            dispatcher.call('customMouseOver', e, d, d3Selection.mouse(e));
+        }
+
+        /**
+         * Animation tween of horizontal bars
+         * @param  {obj} d data of bar
+         * @return {void}
+         */
+        function horizontalBarsTween(d) {
+            let node = d3Selection.select(this),
+                i = d3Interpolate.interpolateRound(0, xScale(d[1] - d[0])),
+                j = d3Interpolate.interpolateNumber(0, 1);
+
+            return function (t) {
+                node.attr('width', i(t))
+                    .style('opacity', j(t));
+            }
+        }
 
         /**
          * Helper method to update the x position of the vertical marker
@@ -713,6 +736,23 @@ define(function(require){
             return width > tooltipThreshold;
         }
 
+        /**
+         * Animation tween of vertical bars
+         * @param  {obj} d data of bar
+         * @return {void}
+         */
+        function verticalBarsTween(d) {
+            let node = d3Selection.select(this),
+                i = d3Interpolate.interpolateRound(0, yScale(d[0]) - yScale(d[1])),
+                j = d3Interpolate.interpolateNumber(0,1);
+
+            return function (t) {
+                node
+                    .attr('height', i(t))
+                    .style('opacity', j(t));
+            }
+        }
+
         // API
         /**
          * Gets or Sets the aspect ratio of the chart
@@ -725,6 +765,22 @@ define(function(require){
                 return aspectRatio;
             }
             aspectRatio = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the padding of the stacked bar chart
+         * The default value is
+         * @param  { Number | module } _x Padding value to get/set
+         * @return { padding | module} Current padding or Chart module to chain calls
+         * @public
+         */
+        exports.betweenBarsPadding = function (_x) {
+            if (!arguments.length) {
+                return betweenBarsPadding;
+            }
+            betweenBarsPadding = _x;
 
             return this;
         };
@@ -746,6 +802,8 @@ define(function(require){
 
         /**
          * Chart exported to png and a download action is fired
+         * @param {String} filename     File title for the resulting picture
+         * @param {String} title        Title to add at the top of the exported picture
          * @public
          */
         exports.exportChart = function(filename, title) {
@@ -802,22 +860,6 @@ define(function(require){
         };
 
         /**
-         * Gets or Sets the horizontal direction of the chart
-         * @param  {number} _x Desired horizontal direction for the chart
-         * @return { isHorizontal | module} If it is horizontal or module to chain calls
-         * @deprecated
-         */
-        exports.horizontal = function (_x) {
-            if (!arguments.length) {
-                return isHorizontal;
-            }
-            isHorizontal = _x;
-            console.log('We are deprecating the .horizontal() accessor, use .isHorizontal() instead');
-
-            return this;
-        };
-
-        /**
          * Gets or Sets the isAnimated property of the chart, making it to animate when render.
          * By default this is 'false'
          *
@@ -830,6 +872,22 @@ define(function(require){
                 return isAnimated;
             }
             isAnimated = _x;
+
+            return this;
+        };
+
+        /**
+         * Pass language tag for the tooltip to localize the date.
+         * Feature uses Intl.DateTimeFormat, for compatability and support, refer to
+         * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat
+         * @param  {String} _x  must be a language tag (BCP 47) like 'en-US' or 'fr-FR'
+         * @return { (String|Module) }    Current locale or module to chain calls
+         */
+        exports.locale = function(_x) {
+            if (!arguments.length) {
+                return locale;
+            }
+            locale = _x;
 
             return this;
         };
@@ -906,6 +964,21 @@ define(function(require){
                 return yTicks;
             }
             yTicks = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the loading state of the chart
+         * @param  {string} markup Desired markup to show when null data
+         * @return { loadingState | module} Current loading state markup or Chart module to chain calls
+         * @public
+         */
+        exports.loadingState = function(_markup) {
+            if (!arguments.length) {
+                return loadingState;
+            }
+            loadingState = _markup;
 
             return this;
         };

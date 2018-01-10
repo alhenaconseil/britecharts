@@ -28,6 +28,7 @@ define(function(require){
      *         quantity: 3,
      *         name: 'luminous'
      *     }
+     * ]
      */
 
 
@@ -111,6 +112,7 @@ define(function(require){
          * @param  {D3Selection} _selection A d3 selection that represents
          *                                  the container(s) where the chart(s) will be rendered
          * @param {object} _data The data to attach and generate the chart
+         * @private
          */
         function exports(_selection) {
             _selection.each(function(_data){
@@ -120,6 +122,7 @@ define(function(require){
 
                 buildColorScale();
                 buildSVG(this);
+
                 if (isHorizontal) {
                     drawHorizontalLegend();
                 } else {
@@ -129,19 +132,20 @@ define(function(require){
         }
 
         /**
-         * Depending on the size of the horizontal legend, we are going to either
-         * center the legend or add a new line with the last entry of the legend
+         * Depending on the size of the horizontal legend, we are going to add a new
+         * line with the last entry of the legend
          * @return {void}
+         * @private
          */
         function adjustLines() {
-            let lineWidth = svg.select('.legend-line').node().getBoundingClientRect().width;
+            let lineWidth = svg.select('.legend-line').node().getBoundingClientRect().width + markerSize;
             let lineWidthSpace = chartWidth - lineWidth;
 
-            if (lineWidthSpace > 0) {
-                centerLegendOnSVG();
-            } else {
+            if (lineWidthSpace <= 0) {
                 splitInLines();
             }
+
+            centerLegendOnSVG();
         }
 
         /**
@@ -152,8 +156,7 @@ define(function(require){
         function buildContainerGroups() {
             let container = svg
               .append('g')
-                .classed('legend-container-group', true)
-                .attr('transform', `translate(${margin.left},${margin.top})`);
+                .classed('legend-container-group', true);
 
             container
               .append('g')
@@ -184,6 +187,9 @@ define(function(require){
                 buildContainerGroups();
             }
 
+            svg.select('g.legend-container-group')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
             svg
                 .attr('width', width)
                 .attr('height', height);
@@ -192,9 +198,10 @@ define(function(require){
         /**
          * Centers the legend on the chart given that is a single line of labels
          * @return {void}
+         * @private
          */
         function centerLegendOnSVG() {
-            let legendGroupSize = svg.select('g.legend-container-group').node().getBoundingClientRect().width;
+            let legendGroupSize = svg.select('g.legend-container-group').node().getBoundingClientRect().width + getLineElementMargin();
             let emptySpace = width - legendGroupSize;
 
             if (emptySpace > 0) {
@@ -205,6 +212,7 @@ define(function(require){
 
         /**
          * Removes the faded class from all the entry lines
+         * @private
          */
         function cleanFadedLines() {
             svg.select('.legend-group')
@@ -218,6 +226,10 @@ define(function(require){
          */
         function drawHorizontalLegend() {
             let xOffset = markerSize;
+
+            svg.select('.legend-group')
+                .selectAll('g')
+                .remove()
 
             // We want a single line
             svg.select('.legend-group')
@@ -339,6 +351,7 @@ define(function(require){
         /**
          * Applies the faded class to all lines but the one that has the given id
          * @param  {number} exceptionItemId Id of the line that needs to stay the same
+         * @private
          */
         function fadeLinesBut(exceptionItemId) {
             let classToFade = 'g.legend-entry';
@@ -354,6 +367,7 @@ define(function(require){
         /**
          * Calculates the margin between elements of the legend
          * @return {Number} Margin to apply between elements
+         * @private
          */
         function getLineElementMargin() {
             return marginRatio * markerSize;
@@ -378,8 +392,11 @@ define(function(require){
             newLine.append(() => lastEntry.node());
         }
 
+        // API
+
         /**
-         * Clears the highlighted line entry
+         * Clears all highlighted entries
+         * @public
          */
         exports.clearHighlight = function() {
             cleanFadedLines();
@@ -418,6 +435,7 @@ define(function(require){
         /**
          * Highlights a line entry by fading the rest of lines
          * @param  {number} entryId ID of the entry line
+         * @public
          */
         exports.highlight = function(entryId) {
             cleanFadedLines();
@@ -440,22 +458,6 @@ define(function(require){
         };
 
         /**
-         * Gets or Sets the horizontal direction of the chart
-         * @param  {number} _x Desired horizontal direction for the chart
-         * @return { isHorizontal | module} If it is horizontal or module to chain calls
-         * @deprecated
-         */
-        exports.horizontal = function (_x) {
-            if (!arguments.length) {
-                return isHorizontal;
-            }
-            isHorizontal = _x;
-            console.log('We are deprecating the .horizontal() accessor, use .isHorizontal() instead');
-
-            return this;
-        };
-
-        /**
          * Gets or Sets the margin of the legend chart
          * @param  {object} _x Margin object to get/set
          * @return {margin | module} Current margin or Legend module to chain calls
@@ -466,6 +468,22 @@ define(function(require){
                 return margin;
             }
             margin = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the margin ratio of the legend chart.
+         * Used to determine spacing between legend elements.
+         * @param  {number} _x Margin Ratio to get/set
+         * @return {number | module} Current marginRatio or Legend module to chain calls
+         * @public
+         */
+        exports.marginRatio = function(_x) {
+            if (!arguments.length) {
+                return marginRatio;
+            }
+            marginRatio = _x;
 
             return this;
         };
@@ -484,6 +502,21 @@ define(function(require){
                 return markerSize;
             }
             markerSize = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the number format of the legend chart
+         * @param  {string} _x Desired number format for the legend chart
+         * @return {numberFormat | module} Current number format or Legend module to chain calls
+         * @public
+         */
+        exports.numberFormat = function(_x) {
+            if (!arguments.length) {
+                return numberFormat;
+            }
+            numberFormat = _x;
 
             return this;
         };

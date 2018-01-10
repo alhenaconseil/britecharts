@@ -1,19 +1,21 @@
 'use strict';
 
-var d3Selection = require('d3-selection'),
+const d3Selection = require('d3-selection');
 
-    PubSub = require('pubsub-js'),
+const PubSub = require('pubsub-js');
 
-    colors = require('./../src/charts/helpers/colors'),
+const colors = require('./../src/charts/helpers/colors');
 
-    stackedBarChart = require('./../src/charts/stacked-bar'),
-    tooltip = require('./../src/charts/tooltip'),
-    stackedDataBuilder = require('./../test/fixtures/stackedBarDataBuilder'),
-    colorSelectorHelper = require('./helpers/colorSelector');
-    require('./helpers/resizeHelper');
+const stackedBarChart = require('./../src/charts/stacked-bar');
+const tooltip = require('./../src/charts/tooltip');
+const stackedDataBuilder = require('./../test/fixtures/stackedBarDataBuilder');
+const colorSelectorHelper = require('./helpers/colorSelector');
+let redrawCharts;
+
+require('./helpers/resizeHelper');
 
 function createStackedBarChartWithTooltip(optionalColorSchema) {
-    var stackedBar = stackedBarChart(),
+    let stackedBar = stackedBarChart(),
         chartTooltip = tooltip(),
         testDataSet = new stackedDataBuilder.StackedBarDataBuilder(),
         container = d3Selection.select('.js-stacked-bar-chart-tooltip-container'),
@@ -33,6 +35,7 @@ function createStackedBarChartWithTooltip(optionalColorSchema) {
             .stackLabel('stack')
             .nameLabel('date')
             .valueLabel('views')
+            .betweenBarsPadding(0.3)
             .on('customMouseOver', function() {
                 chartTooltip.show();
             })
@@ -68,7 +71,7 @@ function createStackedBarChartWithTooltip(optionalColorSchema) {
 }
 
 function createHorizontalStackedBarChart(optionalColorSchema) {
-    var stackedBar = stackedBarChart(),
+    let stackedBar = stackedBarChart(),
         chartTooltip = tooltip(),
         testDataSet = new stackedDataBuilder.StackedBarDataBuilder(),
         container = d3Selection.select('.js-stacked-bar-chart-fixed-container'),
@@ -87,7 +90,7 @@ function createHorizontalStackedBarChart(optionalColorSchema) {
             .width(containerWidth)
             .isAnimated(true)
             .margin({
-                left: 80,
+                left: 100,
                 top: 40,
                 right: 30,
                 bottom: 20
@@ -95,6 +98,7 @@ function createHorizontalStackedBarChart(optionalColorSchema) {
             .nameLabel('date')
             .valueLabel('views')
             .stackLabel('stack')
+            .colorSchema(colors.colorSchemas.teal.reverse())
             .on('customMouseOver', function() {
                 chartTooltip.show();
             })
@@ -132,7 +136,7 @@ if (d3Selection.select('.js-stacked-bar-chart-tooltip-container').node()){
 
     // For getting a responsive behavior on our chart,
     // we'll need to listen to the window resize event
-    var redrawCharts = function(){
+    redrawCharts = function(){
         d3Selection.selectAll('.stacked-bar').remove();
 
         createStackedBarChartWithTooltip();

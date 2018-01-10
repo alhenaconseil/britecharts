@@ -19,13 +19,22 @@ define(function(require){
         getXAxisSettings,
         getLocaleDateFormatter
     } = require('./helpers/timeAxis');
-    const {isInteger} = require('./helpers/common');
     const {axisTimeCombinations} = require('./helpers/constants');
-
     const {
         formatIntegerValue,
         formatDecimalValue
     } = require('./helpers/formatHelpers');
+    const {
+        createFilterContainer,
+        createGlowWithMatrix,
+    } = require('./helpers/filters');
+    const {
+        isInteger,
+        addDays,
+        diffDays
+    } = require('./helpers/common');
+    const {bar} = require('./helpers/loadingStates');
+
 
     const uniq = (arrArg) => arrArg.filter((elem, pos, arr) => arr.indexOf(elem) === pos);
 
@@ -37,22 +46,19 @@ define(function(require){
 
     /**
      * @typedef areaChartData
-     * @type {Object}
-     * @property {Object[]} data       All data entries
+     * @type {Object[]}
      * @property {String} date         Date of the entry
      * @property {String} name         Name of the entry
      * @property {Number} value        Value of the entry
      *
      * @example
-     * {
-     *     'data': [
-     *         {
-     *             "date": "2011-01-05T00:00:00Z",
-     *             "name": "Direct",
-     *             "value": 0
-     *         }
-     *     ]
-     * }
+     * [
+     *     {
+     *         "date": "2011-01-05T00:00:00Z",
+     *         "name": "Direct",
+     *         "value": 0
+     *     }
+     * ]
      */
 
     /**
@@ -85,6 +91,7 @@ define(function(require){
             },
             width = 960,
             height = 500,
+            loadingState = bar,
 
             xScale, xAxis, xMonthAxis,
             yScale, yAxis,
@@ -98,10 +105,21 @@ define(function(require){
             tickPadding = 5,
 
             colorSchema = colorHelper.colorSchemas.britecharts,
+            lineGradient = colorHelper.colorGradients.greenBlue,
 
-            areaOpacity = 0.64,
+            highlightFilter = null,
+            highlightFilterId = null,
+            highlightCircleSize = 12,
+            highlightCircleRadius = 5,
+            highlightCircleStroke = 1.2,
+            highlightCircleActiveRadius = highlightCircleRadius + 2,
+            highlightCircleActiveStrokeWidth = 5,
+            highlightCircleActiveStrokeOpacity = 0.6,
+
+            areaOpacity = 0.24,
             categoryColorMap,
             order,
+            topicsOrder,
 
             xAxisFormat = null,
             xTicks = null,
@@ -111,8 +129,10 @@ define(function(require){
             baseLine,
 
             layers,
+            series,
             layersInitial,
             area,
+            areaOutline,
 
             // Area Animation
             maxAreaNumber = 8,
@@ -120,9 +140,9 @@ define(function(require){
             areaAnimationDelays = d3Array.range(areaAnimationDelayStep, maxAreaNumber* areaAnimationDelayStep, areaAnimationDelayStep),
 
             overlay,
-
+            overlayColor = 'rgba(0, 0, 0, 0)',
             verticalMarkerContainer,
-            verticalMarker,
+            verticalMarkerLine,
             epsilon,
 
             dataPoints            = {},
@@ -158,12 +178,20 @@ define(function(require){
             valueLabel = 'value',
             keyLabel = 'name',
 
+            emptyDataConfig = {
+                minDate: new Date(new Date().setDate(new Date().getDate()-30)),
+                maxDate: new Date(),
+                maxY: 500
+            },
+
+            isUsingFakeData = false,
+
             // getters
             getName = ({name}) => name,
             getDate = ({date}) => date,
 
             // events
-            dispatcher = d3Dispatch.dispatch('customMouseOver', 'customMouseOut', 'customMouseMove');
+            dispatcher = d3Dispatch.dispatch('customMouseOver', 'customMouseOut', 'customMouseMove', 'customDataEntryClick');
 
        /**
          * This function creates the graph using the selection and data provided
@@ -194,8 +222,27 @@ define(function(require){
         }
 
         /**
+         * Adds a filter to the element
+         * @param {DOMElement} el
+         * @private
+         */
+        function addGlowFilter(el) {
+            if (!highlightFilter) {
+                highlightFilter = createFilterContainer(svg.select('.metadata-group'));
+                highlightFilterId = createGlowWithMatrix(highlightFilter);
+            }
+
+            d3Selection.select(el)
+                .style('stroke-width', highlightCircleActiveStrokeWidth)
+                .style('r', highlightCircleActiveRadius)
+                .style('stroke-opacity', highlightCircleActiveStrokeOpacity)
+                .attr('filter', `url(#${highlightFilterId})`);
+        }
+
+        /**
          * Adds events to the container group if the environment is not mobile
          * Adding: mouseover, mouseout and mousemove
+         * @private
          */
         function addMouseEvents() {
             svg
@@ -332,16 +379,17 @@ define(function(require){
                     });
                 });
 
-            let initialTotalsObject = uniq(data.map(({name}) => name))
+            let initialTotalsObject = uniq(data.map(getName))
                                         .reduce((memo, key) => (
                                             assign({}, memo, {[key]: 0})
                                         ), {});
 
-            let totals = data.reduce((memo, item) => (
-                assign({}, memo, {[item.name]: memo[item.name]  += item.value})
-            ), initialTotalsObject);
+            let totals = data
+                .reduce((memo, item) => (
+                    assign({}, memo, {[item.name]: memo[item.name] += item.value})
+                ), initialTotalsObject);
 
-            order = formatOrder(totals);
+            order = topicsOrder || formatOrder(totals);
 
             let stack3 = d3Shape.stack()
                 .keys(order)
@@ -364,6 +412,7 @@ define(function(require){
                 .sort((a, b) => {
                     if (totals[a] > totals[b]) return -1;
                     if (totals[a] === totals[b]) return 0;
+
                     return 1;
                 });
 
@@ -383,12 +432,14 @@ define(function(require){
          * @private
          */
         function buildScales() {
+            const maxValueByDate = isUsingFakeData ? emptyDataConfig.maxY : getMaxValueByDate();
+
             xScale = d3Scale.scaleTime()
                 .domain(d3Array.extent(dataByDate, ({date}) => date))
                 .rangeRound([0, chartWidth]);
 
             yScale = d3Scale.scaleLinear()
-                .domain([0, getMaxValueByDate()])
+                .domain([0, maxValueByDate])
                 .rangeRound([chartHeight, 0])
                 .nice();
 
@@ -416,17 +467,46 @@ define(function(require){
         }
 
         /**
-         * Parses dates and values into JS Date objects and numbers
-         * @param  {obj} data Raw data from JSON file
-         * @return {obj}      Parsed data with values and dates
+         * Creates fake data for when data is an empty array
+         * @return {array}      Fake data built from emptyDataConfig settings
          */
-        function cleanData(data) {
-            return data.map((d) => {
+        function createFakeData() {
+            const numDays = diffDays(emptyDataConfig.minDate, emptyDataConfig.maxDate)
+            const emptyArray = Array.apply(null, Array(numDays));
+
+            isUsingFakeData = true;
+
+            return [
+                ...emptyArray.map((el, i) => ({
+                    [dateLabel]: addDays(emptyDataConfig.minDate, i),
+                    [valueLabel]: 0,
+                    [keyLabel]: '1',
+                })),
+                ...emptyArray.map((el, i) => ({
+                    [dateLabel]: addDays(emptyDataConfig.minDate, i),
+                    [valueLabel]: 0,
+                    [keyLabel]: '2',
+                }))
+            ];
+
+        }
+
+        /**
+         * Cleaning data casting the values and dates to the proper type while keeping
+         * the rest of properties on the data. It creates fake data is the data is empty.
+         * @param  {areaChartData} originalData   Raw data from the container
+         * @return {areaChartData}                Parsed data with values and dates
+         * @private
+         */
+        function cleanData(originalData) {
+            originalData = originalData.length === 0 ? createFakeData() : originalData;
+
+            return originalData.reduce((acc, d) => {
                 d.date = new Date(d[dateLabel]),
                 d.value = +d[valueLabel]
 
-                return d;
-            });
+                return [...acc, d];
+            }, []);
         }
 
         /**
@@ -473,33 +553,34 @@ define(function(require){
             // Creates Dots on Data points
             var points = svg.select('.chart-group').selectAll('.dots')
                 .data(layers)
-              .enter().append('g')
-                .attr('class', 'dots')
-                .attr('d', ({values}) => area(values))
-                .attr('clip-path', 'url(#clip)');
+                .enter()
+                  .append('g')
+                    .attr('class', 'dots')
+                    .attr('d', ({values}) => area(values))
+                    .attr('clip-path', 'url(#clip)');
 
             // Processes the points
             // TODO: Optimize this code
             points.selectAll('.dot')
                 .data(({values}, index) => values.map((point) => ({index, point})))
                 .enter()
-                .append('circle')
-                .attr('class','dot')
-                .attr('r', () => pointsSize)
-                .attr('fill', () => pointsColor)
-                .attr('stroke-width', '0')
-                .attr('stroke', pointsBorderColor)
-                .attr('transform', function(d) {
-                    let {point} = d;
-                    let key = xScale(point.date);
+                  .append('circle')
+                    .attr('class','dot')
+                    .attr('r', () => pointsSize)
+                    .attr('fill', () => pointsColor)
+                    .attr('stroke-width', '0')
+                    .attr('stroke', pointsBorderColor)
+                    .attr('transform', function(d) {
+                        let {point} = d;
+                        let key = xScale(point.date);
 
-                    dataPoints[key] = dataPoints[key] || [];
-                    dataPoints[key].push(d);
+                        dataPoints[key] = dataPoints[key] || [];
+                        dataPoints[key].push(d);
 
-                    let {date, y, y0} = point;
+                        let {date, y, y0} = point;
 
-                    return `translate( ${xScale(date)}, ${yScale(y + y0)} )`;
-                });
+                        return `translate( ${xScale(date)}, ${yScale(y + y0)} )`;
+                    });
         }
 
         /**
@@ -507,12 +588,17 @@ define(function(require){
          * @return void
          */
         function drawGridLines(xTicks, yTicks) {
+
+            svg.select('.grid-lines-group')
+                .selectAll('line')
+                .remove();
+
             if (grid === 'horizontal' || grid === 'full') {
                 horizontalGridLines = svg.select('.grid-lines-group')
                     .selectAll('line.horizontal-grid-line')
                     .data(yScale.ticks(yTicks))
                     .enter()
-                        .append('line')
+                      .append('line')
                         .attr('class', 'horizontal-grid-line')
                         .attr('x1', (-xAxisPadding.left - 30))
                         .attr('x2', chartWidth)
@@ -525,7 +611,7 @@ define(function(require){
                     .selectAll('line.vertical-grid-line')
                     .data(xScale.ticks(xTicks))
                     .enter()
-                        .append('line')
+                      .append('line')
                         .attr('class', 'vertical-grid-line')
                         .attr('y1', 0)
                         .attr('y2', chartHeight)
@@ -538,12 +624,12 @@ define(function(require){
                 .selectAll('line.extended-x-line')
                 .data([0])
                 .enter()
-              .append('line')
-                .attr('class', 'extended-x-line')
-                .attr('x1', (-xAxisPadding.left - 30))
-                .attr('x2', chartWidth)
-                .attr('y1', height - margin.bottom - margin.top)
-                .attr('y2', height - margin.bottom - margin.top);
+                  .append('line')
+                    .attr('class', 'extended-x-line')
+                    .attr('x1', (-xAxisPadding.left - 30))
+                    .attr('x2', chartWidth)
+                    .attr('y1', height - margin.bottom - margin.top)
+                    .attr('y2', height - margin.bottom - margin.top);
         }
 
         /**
@@ -551,15 +637,56 @@ define(function(require){
          * @private
          */
         function drawHoverOverlay() {
+            // Not ideal, we need to figure out how to call exit for nested elements
+            if (overlay) {
+                svg.selectAll('.overlay').remove();
+            }
+
             overlay = svg.select('.metadata-group')
-                .append('rect')
+              .append('rect')
                 .attr('class', 'overlay')
                 .attr('y1', 0)
                 .attr('y2', chartHeight)
                 .attr('height', chartHeight)
                 .attr('width', chartWidth)
-                .attr('fill', 'rgba(0,0,0,0)')
+                .attr('fill', overlayColor)
                 .style('display', 'none');
+        }
+
+        /**
+         * Draws an empty line when the data is all zero
+         * @private
+         */
+        function drawEmptyDataLine() {
+            let emptyDataLine = d3Shape.line()
+                .x( (d) => xScale(d.date) )
+                .y( () => yScale(0) - 1 );
+
+            let chartGroup = svg.select('.chart-group');
+
+            chartGroup
+              .append('path')
+                .attr('class', 'empty-data-line')
+                .attr('d', emptyDataLine(dataByDateFormatted))
+                .style('stroke', 'url(#empty-data-line-gradient)');
+
+            chartGroup
+              .append('linearGradient')
+                .attr('id', 'empty-data-line-gradient')
+                .attr('gradientUnits', 'userSpaceOnUse')
+                .attr('x1', 0)
+                .attr('x2', xScale(data[data.length - 1].date))
+                .attr('y1', 0)
+                .attr('y2', 0)
+                .selectAll('stop')
+                .data([
+                    {offset: '0%', color: lineGradient[0]},
+                    {offset: '100%', color: lineGradient[1]}
+                ])
+                .enter()
+                  .append('stop')
+                    .attr('offset', ({offset}) => offset)
+                    .attr('stop-color', ({color}) => color);
         }
 
         /**
@@ -567,7 +694,18 @@ define(function(require){
          * @private
          */
         function drawStackedAreas() {
-            let series;
+            // Not ideal, we need to figure out how to call exit for nested elements
+            if (series) {
+                svg.selectAll('.layer-container').remove();
+                svg.selectAll('.layer').remove();
+                svg.selectAll('.area-outline').remove();
+            }
+
+            if (isUsingFakeData) {
+                drawEmptyDataLine();
+
+                return;
+            }
 
             area = d3Shape.area()
                 .curve(d3Shape.curveMonotoneX)
@@ -575,18 +713,30 @@ define(function(require){
                 .y0( (d) => yScale(d[0]) )
                 .y1( (d) => yScale(d[1]) );
 
+            areaOutline = d3Shape.line()
+                .curve(area.curve())
+                .x( ({data}) => xScale(data.date) )
+                .y( (d) => yScale(d[1]) );
+
             if (isAnimated) {
                 series = svg.select('.chart-group').selectAll('.layer')
-                    .data(layersInitial)
+                    .data(layersInitial, getName)
                     .enter()
-                  .append('g')
-                    .classed('layer-container', true);
+                      .append('g')
+                        .classed('layer-container', true);
 
                 series
                   .append('path')
                     .attr('class', 'layer')
                     .attr('d', area)
+                    .style('opacity', areaOpacity)
                     .style('fill', ({key}) => categoryColorMap[key]);
+
+                series
+                  .append('path')
+                    .attr('class', 'area-outline')
+                    .attr('d', areaOutline)
+                    .style('stroke', ({key}) => categoryColorMap[key]);
 
                 // Update
                 svg.select('.chart-group').selectAll('.layer')
@@ -598,24 +748,46 @@ define(function(require){
                     .attr('d', area)
                     .style('opacity', areaOpacity)
                     .style('fill', ({key}) => categoryColorMap[key]);
+
+                svg.select('.chart-group').selectAll('.area-outline')
+                    .data(layers)
+                    .transition()
+                    .delay( (_, i) => areaAnimationDelays[i])
+                    .duration(areaAnimationDuration)
+                    .ease(ease)
+                    .attr('d', areaOutline);
+
             } else {
                 series = svg.select('.chart-group').selectAll('.layer')
                     .data(layers)
                     .enter()
-                  .append('g')
-                    .classed('layer-container', true);
+                      .append('g')
+                        .classed('layer-container', true);
 
                 series
                   .append('path')
                     .attr('class', 'layer')
                     .attr('d', area)
+                    .style('opacity', areaOpacity)
                     .style('fill', ({key}) => categoryColorMap[key]);
 
-                // Update
                 series
+                  .append('path')
+                    .attr('class', 'area-outline')
+                    .attr('d', areaOutline)
+                    .style('stroke', ({key}) => categoryColorMap[key]);
+
+
+                // Update
+                svg.select('.chart-group').selectAll('.layer')
                     .attr('d', area)
                     .style('opacity', areaOpacity)
                     .style('fill', ({key}) => categoryColorMap[key]);
+
+                svg.select('.chart-group').selectAll('.area-outline')
+                    .attr('class', 'area-outline')
+                    .attr('d', areaOutline)
+                    .style('stroke', ({key}) => categoryColorMap[key]);
             }
 
             // Exit
@@ -630,12 +802,17 @@ define(function(require){
          * @return void
          */
         function drawVerticalMarker() {
+            // Not ideal, we need to figure out how to call exit for nested elements
+            if (verticalMarkerContainer) {
+                svg.selectAll('.vertical-marker-container').remove();
+            }
+
             verticalMarkerContainer = svg.select('.metadata-group')
-                .append('g')
+              .append('g')
                 .attr('class', 'vertical-marker-container')
                 .attr('transform', 'translate(9999, 0)');
 
-            verticalMarker = verticalMarkerContainer.selectAll('path')
+            verticalMarkerLine = verticalMarkerContainer.selectAll('path')
                 .data([{
                     x1: 0,
                     y1: 0,
@@ -643,19 +820,20 @@ define(function(require){
                     y2: 0
                 }])
                 .enter()
-              .append('line')
-                .classed('vertical-marker', true)
-                .attr('x1', 0)
-                .attr('y1', chartHeight)
-                .attr('x2', 0)
-                .attr('y2', 0);
+                  .append('line')
+                    .classed('vertical-marker', true)
+                    .attr('x1', 0)
+                    .attr('y1', chartHeight)
+                    .attr('x2', 0)
+                    .attr('y2', 0);
         }
 
         /**
          * Removes all the datapoints highlighter circles added to the marker container
          * @return void
+         * @private
          */
-        function eraseDataPointHighlights() {
+        function cleanDataPointHighlights() {
             verticalMarkerContainer.selectAll('.circle-container').remove();
         }
 
@@ -667,15 +845,15 @@ define(function(require){
          */
         function getDataByDate(data) {
             return d3Collection.nest()
-                                .key(getDate)
-                                .entries(
-                                    data.sort((a, b) => a.date - b.date)
-                                )
-                                .map(d => {
-                                    return assign({}, d, {
-                                        date: new Date(d.key)
-                                    });
-                                });
+                .key(getDate)
+                .entries(
+                    data.sort((a, b) => a.date - b.date)
+                )
+                .map(d => {
+                    return assign({}, d, {
+                        date: new Date(d.key)
+                    });
+                });
 
             // let b =  d3Collection.nest()
             //                     .key(getDate).sortKeys(d3Array.ascending)
@@ -696,16 +874,6 @@ define(function(require){
             });
 
             return maxValueByDate;
-        }
-
-        /**
-         * Extract X position on the chart from a given mouse event
-         * @param  {obj} event D3 mouse event
-         * @return {Number}       Position on the x axis of the mouse
-         * @private
-         */
-        function getMouseXPosition(event) {
-            return d3Selection.mouse(event)[0];
         }
 
         /**
@@ -737,10 +905,11 @@ define(function(require){
          * and updates metadata related to it
          * @private
          */
-        function handleMouseMove(e, d) {
+        function handleMouseMove(e) {
             epsilon || setEpsilon();
 
-            let dataPoint = getNearestDataPoint(getMouseXPosition(e) - margin.left),
+            let [xPosition, yPosition] = d3Selection.mouse(e),
+                dataPoint = getNearestDataPoint(xPosition - margin.left),
                 dataPointXPosition;
 
             if (dataPoint) {
@@ -750,7 +919,7 @@ define(function(require){
                 // Add data points highlighting
                 highlightDataPoints(dataPoint);
                 // Emit event with xPosition for tooltip or similar feature
-                dispatcher.call('customMouseMove', e, dataPoint, categoryColorMap, dataPointXPosition);
+                dispatcher.call('customMouseMove', e, dataPoint, categoryColorMap, dataPointXPosition, yPosition);
             }
         }
 
@@ -761,7 +930,7 @@ define(function(require){
          */
         function handleMouseOut(e, d) {
             overlay.style('display', 'none');
-            verticalMarker.classed('bc-is-active', false);
+            verticalMarkerLine.classed('bc-is-active', false);
             verticalMarkerContainer.attr('transform', 'translate(9999, 0)');
 
             dispatcher.call('customMouseOut', e, d, d3Selection.mouse(e));
@@ -773,9 +942,18 @@ define(function(require){
          */
         function handleMouseOver(e, d) {
             overlay.style('display', 'block');
-            verticalMarker.classed('bc-is-active', true);
+            verticalMarkerLine.classed('bc-is-active', true);
 
             dispatcher.call('customMouseOver', e, d, d3Selection.mouse(e));
+        }
+
+        /**
+         * Mouseclick handler over one of the highlight points
+         * It will only pass the information with the event
+         * @private
+         */
+        function handleHighlightClick(e, d) {
+            dispatcher.call('customDataEntryClick', e, d, d3Selection.mouse(e));
         }
 
         /**
@@ -786,30 +964,36 @@ define(function(require){
         function highlightDataPoints({values}) {
             let accumulator = 0;
 
-            eraseDataPointHighlights();
+            cleanDataPointHighlights();
 
             // ensure order stays constant
             values = values
-                        .filter(v => !!v)
-                        .sort((a,b) => order.indexOf(a.name) > order.indexOf(b.name))
+                .filter(v => !!v)
+                .sort((a,b) => order.indexOf(a.name) > order.indexOf(b.name));
 
-            values.forEach(({name}, index) => {
+            values.forEach((d, index) => {
                 let marker = verticalMarkerContainer
-                                .append('g')
-                                .classed('circle-container', true),
-                    circleSize = 12;
+                    .append('g')
+                    .classed('circle-container', true)
+                        .append('circle')
+                        .classed('data-point-highlighter', true)
+                        .attr('cx', highlightCircleSize)
+                        .attr('cy', 0)
+                        .attr('r', highlightCircleRadius)
+                        .style('stroke-width', highlightCircleStroke)
+                        .style('stroke', categoryColorMap[d.name])
+                        .style('cursor', 'pointer')
+                        .on('click', function() {
+                            addGlowFilter(this);
+                            handleHighlightClick(this, d);
+                        })
+                        .on('mouseout', function() {
+                            removeFilter(this);
+                        });
 
                 accumulator = accumulator + values[index][valueLabel];
 
-                marker.append('circle')
-                    .classed('data-point-highlighter', true)
-                    .attr('cx', circleSize)
-                    .attr('cy', 0)
-                    .attr('r', 5)
-                    .style('stroke-width', 2)
-                    .style('stroke', categoryColorMap[name]);
-
-                marker.attr('transform', `translate( ${(- circleSize)}, ${(yScale(accumulator))} )` );
+                marker.attr('transform', `translate( ${(- highlightCircleSize)}, ${(yScale(accumulator))} )` );
             });
         }
 
@@ -823,13 +1007,22 @@ define(function(require){
         }
 
         /**
+         * Resets a point filter
+         * @param {DOMElement} point  Point to reset
+         */
+        function removeFilter(point) {
+            d3Selection.select(point)
+                .attr('filter', 'none');
+        }
+
+        /**
          * Determines if we should add the tooltip related logic depending on the
          * size of the chart and the tooltipThreshold variable value
          * @return {boolean} Should we build the tooltip?
          * @private
          */
         function shouldShowTooltip() {
-            return width > tooltipThreshold;
+            return width > tooltipThreshold && !isUsingFakeData;
         }
 
 
@@ -891,6 +1084,21 @@ define(function(require){
                 return dateLabel;
             }
             dateLabel = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the emptyDataConfig of the chart
+         * @param  {Object} _x emptyDataConfig object to get/set
+         * @return { Object | module} Current config for when chart data is an empty array
+         * @public
+         */
+        exports.emptyDataConfig = function(_x) {
+            if (!arguments.length) {
+                return emptyDataConfig;
+            }
+            emptyDataConfig = _x;
 
             return this;
         };
@@ -994,11 +1202,42 @@ define(function(require){
         };
 
         /**
+         * Pass an override for the ordering of the topics
+         * @param  {String[]} _x           Array of the names of your tooltip items
+         * @return { String[] | module}    Current override order or Chart module to chain calls
+         * @public
+         */
+        exports.topicsOrder = function(_x) {
+            if (!arguments.length) {
+                return topicsOrder;
+            }
+            topicsOrder = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the loading state of the chart
+         * @param  {string} markup Desired markup to show when null data
+         * @return { loadingState | module} Current loading state markup or Chart module to chain calls
+         * @public
+         */
+        exports.loadingState = function(_markup) {
+            if (!arguments.length) {
+                return loadingState;
+            }
+            loadingState = _markup;
+
+            return this;
+        };
+
+        /**
          * Pass language tag for the tooltip to localize the date.
          * Feature uses Intl.DateTimeFormat, for compatability and support, refer to
          * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat
          * @param  {String} _x  must be a language tag (BCP 47) like 'en-US' or 'fr-FR'
          * @return { (String|Module) }    Current locale or module to chain calls
+         * @public
          */
         exports.locale = function(_x) {
             if (!arguments.length) {
@@ -1011,6 +1250,8 @@ define(function(require){
 
         /**
          * Chart exported to png and a download action is fired
+         * @param {String} filename     File title for the resulting picture
+         * @param {String} title        Title to add at the top of the exported picture
          * @public
          */
         exports.exportChart = function(filename, title) {
@@ -1020,7 +1261,7 @@ define(function(require){
         /**
          * Exposes an 'on' method that acts as a bridge with the event dispatcher
          * We are going to expose this events:
-         * customMouseOver, customMouseMove and customMouseOut
+         * customMouseOver, customMouseMove, customMouseOut and customDataEntryClick
          *
          * @return {module} Bar Chart
          * @public
@@ -1089,9 +1330,27 @@ define(function(require){
         };
 
         /**
+         * Exposes the ability to force the chart to show a certain x format
+         * It requires a `xAxisFormat` of 'custom' in order to work.
+         * NOTE: localization not supported
+         * @param  {String} _x              Desired format for x axis
+         * @return {String | Module}      Current format or module to chain calls
+         * @public
+         */
+        exports.xAxisCustomFormat = function(_x) {
+            if (!arguments.length) {
+              return xAxisCustomFormat;
+            }
+            xAxisCustomFormat = _x;
+
+            return this;
+        };
+
+        /**
          * Exposes the ability to force the chart to show a certain x axis grouping
          * @param  {String} _x Desired format
          * @return {String | Module}    Current format or module to chain calls
+         * @public
          * @example
          *     area.xAxisFormat(area.axisTimeCombinations.HOUR_DAY)
          */
@@ -1111,6 +1370,7 @@ define(function(require){
          *
          * @param  {Number} _x              Desired number of x axis ticks (multiple of 2, 5 or 10)
          * @return {Number | Module}      Current number or ticks or module to chain calls
+         * @public
          */
         exports.xTicks = function(_x) {
             if (!arguments.length) {
@@ -1136,6 +1396,7 @@ define(function(require){
 
             return this;
         };
+
 
         return exports;
     };

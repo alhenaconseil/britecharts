@@ -6,30 +6,35 @@ define(function(require){
     const d3Collection = require('d3-collection');
     const d3Dispatch = require('d3-dispatch');
     const d3Ease = require('d3-ease');
+    const d3Format = require('d3-format');
     const d3Scale = require('d3-scale');
     const d3Shape = require('d3-shape');
     const d3Selection = require('d3-selection');
     const d3Transition = require('d3-transition');
     const d3TimeFormat = require('d3-time-format');
-    const uniqueId = require('lodash.uniqueid')
 
     const {exportChart} = require('./helpers/exportChart');
     const colorHelper = require('./helpers/colors');
-    const {isInteger} = require('./helpers/common');
+    const {line} = require('./helpers/loadingStates');
+
     const {
         getXAxisSettings,
         getLocaleDateFormatter
     } = require('./helpers/timeAxis');
-
+    const { axisTimeCombinations } = require('./helpers/constants');
     const {
-        axisTimeCombinations,
-        lineGradientId
-    } = require('./helpers/constants');
-
+        createFilterContainer,
+        createGlowWithMatrix,
+    } = require('./helpers/filters');
     const {
         formatIntegerValue,
         formatDecimalValue,
     } = require('./helpers/formatHelpers');
+    const {
+        isInteger,
+        uniqueId
+    } = require('./helpers/common');
+
     /**
      * @typedef D3Selection
      * @type {Array[]}
@@ -115,19 +120,21 @@ define(function(require){
      *     .call(lineChart);
      *
      */
-    return function line() {
+    return function module() {
 
         let margin = {
                 top: 60,
                 right: 30,
                 bottom: 40,
-                left: 70
+                left: 70,
             },
             width = 960,
             height = 500,
+            loadingState = line,
             aspectRatio = null,
             tooltipThreshold = 480,
             svg,
+            paths,
             chartWidth, chartHeight,
             xScale, yScale, colorScale,
             xAxis, xMonthAxis, yAxis,
@@ -141,8 +148,18 @@ define(function(require){
             tickPadding = 5,
             colorSchema = colorHelper.colorSchemas.britecharts,
             singleLineGradientColors = colorHelper.colorGradients.greenBlue,
-            lineGradientUniqueId = uniqueId(lineGradientId),
             topicColorMap,
+            linearGradient,
+            lineGradientId = uniqueId('one-line-gradient'),
+
+            highlightFilter = null,
+            highlightFilterId = null,
+            highlightCircleSize = 12,
+            highlightCircleRadius = 5,
+            highlightCircleStroke = 2,
+            highlightCircleActiveRadius = highlightCircleRadius + 2,
+            highlightCircleActiveStrokeWidth = 5,
+            highlightCircleActiveStrokeOpacity = 0.6,
 
             xAxisFormat = null,
             xTicks = null,
@@ -154,6 +171,20 @@ define(function(require){
             animationDuration = 1500,
             maskingRectangle,
 
+            lineCurve = 'linear',
+            curveMap = {
+                linear: d3Shape.curveLinear,
+                basis: d3Shape.curveBasis,
+                cardinal: d3Shape.curveCardinal,
+                catmullRom: d3Shape.curveCatmullRom,
+                monotoneX: d3Shape.curveMonotoneX,
+                monotoneY: d3Shape.curveMonotoneY,
+                natural: d3Shape.curveNatural,
+                step: d3Shape.curveStep,
+                stepAfter: d3Shape.curveStepAfter,
+                stepBefore: d3Shape.curveStepBefore
+            },
+
             dataByTopic,
             dataByDate,
 
@@ -162,18 +193,28 @@ define(function(require){
             topicLabel = 'topic',
             topicNameLabel = 'topicName',
 
+            xAxisLabel = null,
+            xAxisLabelEl = null,
+            xAxisLabelPadding = 36,
+            yAxisLabel = null,
+            yAxisLabelEl = null,
+            yAxisLabelPadding = 36,
+
             yTicks = 5,
 
             overlay,
             overlayColor = 'rgba(0, 0, 0, 0)',
             verticalMarkerContainer,
             verticalMarkerLine,
+            numberFormat,
 
             verticalGridLines,
             horizontalGridLines,
             grid = null,
 
             baseLine,
+
+            pathYCache = {},
 
             // extractors
             getDate = ({date}) => date,
@@ -182,8 +223,7 @@ define(function(require){
             getLineColor = ({topic}) => colorScale(topic),
 
             // events
-            dispatcher = d3Dispatch.dispatch('customMouseOver', 'customMouseOut', 'customMouseMove');
-
+            dispatcher = d3Dispatch.dispatch('customMouseOver', 'customMouseOut', 'customMouseMove', 'customDataEntryClick');
         /**
          * This function creates the graph using the selection and data provided
          *
@@ -210,11 +250,29 @@ define(function(require){
                 createMaskingClip();
 
                 if (shouldShowTooltip()) {
-                    drawVerticalMarker();
                     drawHoverOverlay();
+                    drawVerticalMarker();
                     addMouseEvents();
                 }
             });
+        }
+
+        /**
+         * Adds a filter to the element
+         * @param {DOMElement} el
+         * @private
+         */
+        function addGlowFilter(el) {
+            if (!highlightFilter) {
+                highlightFilter = createFilterContainer(svg.select('.metadata-group'));
+                highlightFilterId = createGlowWithMatrix(highlightFilter);
+            }
+
+            d3Selection.select(el)
+                .style('stroke-width', highlightCircleActiveStrokeWidth)
+                .style('r', highlightCircleActiveRadius)
+                .style('stroke-opacity', highlightCircleActiveStrokeOpacity)
+                .attr('filter', `url(#${highlightFilterId})`);
         }
 
         /**
@@ -256,6 +314,10 @@ define(function(require){
                 format = formatIntegerValue;
             } else {
                 format = formatDecimalValue;
+            }
+
+            if (numberFormat) {
+                format = d3Format.format(numberFormat)
             }
 
             return format(value);
@@ -318,7 +380,8 @@ define(function(require){
             container.selectAll('.x-axis-group')
               .append('g').classed('month-axis', true);
             container
-              .append('g').classed('y-axis-group axis y', true);
+              .append('g').classed('y-axis-group', true)
+              .append('g').classed('axis y', true);
             container
               .append('g').classed('grid-lines-group', true);
             container
@@ -332,22 +395,25 @@ define(function(require){
          * @return {void}
          */
         function buildGradient() {
-            svg.select('.metadata-group')
-              .append('linearGradient')
-                .attr('id', lineGradientUniqueId)
-                .attr('x1', '0%')
-                .attr('y1', '0%')
-                .attr('x2', '100%')
-                .attr('y2', '0%')
-                .selectAll('stop')
-                .data([
-                    {offset:'0%', color: singleLineGradientColors[0]},
-                    {offset:'100%', color: singleLineGradientColors[1]}
-                ])
-                .enter()
-              .append('stop')
-                .attr('offset', ({offset}) => offset)
-                .attr('stop-color', ({color}) => color)
+            if (!linearGradient) {
+                linearGradient = svg.select('.metadata-group')
+                  .append('linearGradient')
+                    .attr('id', lineGradientId)
+                    .attr('x1', '0%')
+                    .attr('y1', '0%')
+                    .attr('x2', '100%')
+                    .attr('y2', '0%')
+                    .attr('gradientUnits', 'userSpaceOnUse')
+                    .selectAll('stop')
+                    .data([
+                        {offset:'0%', color: singleLineGradientColors[0]},
+                        {offset:'100%', color: singleLineGradientColors[1]}
+                    ])
+                    .enter()
+                      .append('stop')
+                        .attr('offset', ({offset}) => offset)
+                        .attr('stop-color', ({color}) => color)
+            }
         }
 
         /**
@@ -409,48 +475,48 @@ define(function(require){
          * @return {obj}                Parsed data with dataByTopic and dataByDate
          */
         function cleanData({dataByTopic, dataByDate}) {
-
-            if (dataByTopic) {
-                let flatData = [];
-
-                dataByTopic.forEach((topic) => {
-                    topic.dates.forEach((date) => {
-                        flatData.push({
-                            topicName: topic[topicNameLabel],
-                            name: topic[topicLabel],
-                            date: date[dateLabel],
-                            value: date[valueLabel]
-                        });
-                    });
-                });
-
-                // Nest data by date and format
-                dataByDate = d3Collection.nest()
-                                .key( getDate )
-                                .entries(flatData)
-                                .map((d) => {
-                                    return {
-                                        date: new Date(d.key),
-                                        topics: d.values
-                                    }
-                                });
-
-                // Normalize dates in keys
-                dataByDate = dataByDate.map((d) => {
-                    d.date = new Date(d.date);
-
-                    return d;
-                });
-
-                // Normalize dataByTopic
-                dataByTopic.forEach(function(kv) {
-                    kv.dates.forEach(function(d) {
-                        d.date = new Date(d[dateLabel]);
-                        d.value = +d[valueLabel];
-                    });
-                });
-
+            if (!dataByTopic) {
+                throw new Error('Data needs to have a dataByTopic property');
             }
+
+            let flatData = [];
+
+            dataByTopic.forEach((topic) => {
+                topic.dates.forEach((date) => {
+                    flatData.push({
+                        topicName: topic[topicNameLabel],
+                        name: topic[topicLabel],
+                        date: date[dateLabel],
+                        value: date[valueLabel]
+                    });
+                });
+            });
+
+            // Nest data by date and format
+            dataByDate = d3Collection.nest()
+                            .key( getDate )
+                            .entries(flatData)
+                            .map((d) => {
+                                return {
+                                    date: new Date(d.key),
+                                    topics: d.values
+                                }
+                            });
+
+            // Normalize dates in keys
+            dataByDate = dataByDate.map((d) => {
+                d.date = new Date(d.date);
+
+                return d;
+            });
+
+            // Normalize dataByTopic
+            dataByTopic.forEach(function(kv) {
+                kv.dates.forEach(function(d) {
+                    d.date = new Date(d[dateLabel]);
+                    d.value = +d[valueLabel];
+                });
+            });
 
             return {dataByTopic, dataByDate};
         }
@@ -489,7 +555,7 @@ define(function(require){
 
         /**
          * Draws the x and y axis on the svg object within their
-         * respective groups
+         * respective groups along with the axis labels if given
          * @private
          */
         function drawAxis(){
@@ -503,12 +569,44 @@ define(function(require){
                     .call(xMonthAxis);
             }
 
-            svg.select('.y-axis-group.axis.y')
-                .transition()
-                .ease(ease)
+            if (xAxisLabel) {
+                if (xAxisLabelEl) {
+                    svg.selectAll('.x-axis-label').remove();
+                }
+                let xLabelXPosition = chartWidth/2;
+                let xLabelYPosition = chartHeight + monthAxisPadding + xAxisLabelPadding;
+
+                xAxisLabelEl = svg.select('.x-axis-group')
+                  .append('text')
+                    .attr('x', xLabelXPosition)
+                    .attr('y', xLabelYPosition)
+                    .attr('text-anchor', 'middle')
+                    .attr('class', 'x-axis-label')
+                    .text(xAxisLabel);
+            }
+
+            svg.select('.y-axis-group .axis.y')
                 .attr('transform', `translate(${-xAxisPadding.left}, 0)`)
                 .call(yAxis)
                 .call(adjustYTickLabels);
+
+            if (yAxisLabel) {
+                if (yAxisLabelEl) {
+                    svg.selectAll('.y-axis-label').remove();
+                }
+                // Note this coordinates are rotated, so they are not what they look
+                let yLabelYPosition = -yAxisLabelPadding - xAxisPadding.left;
+                let yLabelXPosition = -chartHeight/2;
+
+                yAxisLabelEl = svg.select('.y-axis-group')
+                  .append('text')
+                    .attr('x', yLabelXPosition)
+                    .attr('y', yLabelYPosition)
+                    .attr('text-anchor', 'middle')
+                    .attr('transform', 'rotate(270)')
+                    .attr('class', 'y-axis-label')
+                    .text(yAxisLabel);
+            }
         }
 
         /**
@@ -520,21 +618,23 @@ define(function(require){
                 topicLine;
 
             topicLine = d3Shape.line()
+                .curve(curveMap[lineCurve])
                 .x(({date}) => xScale(date))
                 .y(({value}) => yScale(value));
 
             lines = svg.select('.chart-group').selectAll('.line')
-                .data(dataByTopic);
+                .data(dataByTopic, getTopic);
 
-            lines.enter()
+            paths = lines.enter()
               .append('g')
                 .attr('class', 'topic')
-              .append('path')
-                .attr('class', 'line')
-                .attr('d', ({dates}) => topicLine(dates))
-                .style('stroke', (d) => (
-                    dataByTopic.length === 1 ? `url(#${lineGradientUniqueId})` : getLineColor(d)
-                ));
+                  .append('path')
+                    .attr('class', 'line')
+                    .attr('id', ({topic}) => topic)
+                    .attr('d', ({dates}) => topicLine(dates))
+                    .style('stroke', (d) => (
+                        dataByTopic.length === 1 ? `url(#${lineGradientId})` : getLineColor(d)
+                    ));
 
             lines
                 .exit()
@@ -546,12 +646,16 @@ define(function(require){
          * @return void
          */
         function drawGridLines(xTicks, yTicks){
+            svg.select('.grid-lines-group')
+                .selectAll('line')
+                .remove();
+
             if (grid === 'horizontal' || grid === 'full') {
                 horizontalGridLines = svg.select('.grid-lines-group')
                     .selectAll('line.horizontal-grid-line')
                     .data(yScale.ticks(yTicks))
                     .enter()
-                        .append('line')
+                      .append('line')
                         .attr('class', 'horizontal-grid-line')
                         .attr('x1', (-xAxisPadding.left - 30))
                         .attr('x2', chartWidth)
@@ -564,7 +668,7 @@ define(function(require){
                     .selectAll('line.vertical-grid-line')
                     .data(xScale.ticks(xTicks))
                     .enter()
-                        .append('line')
+                      .append('line')
                         .attr('class', 'vertical-grid-line')
                         .attr('y1', 0)
                         .attr('y2', chartHeight)
@@ -577,12 +681,12 @@ define(function(require){
                 .selectAll('line.extended-x-line')
                 .data([0])
                 .enter()
-              .append('line')
-                .attr('class', 'extended-x-line')
-                .attr('x1', (-xAxisPadding.left - 30))
-                .attr('x2', chartWidth)
-                .attr('y1', height - margin.bottom - margin.top)
-                .attr('y2', height - margin.bottom - margin.top);
+                  .append('line')
+                    .attr('class', 'extended-x-line')
+                    .attr('x1', (-xAxisPadding.left - 30))
+                    .attr('x2', chartWidth)
+                    .attr('y1', height - margin.bottom - margin.top)
+                    .attr('y2', height - margin.bottom - margin.top);
         }
 
         /**
@@ -591,15 +695,17 @@ define(function(require){
          * @return void
          */
         function drawHoverOverlay(){
-            overlay = svg.select('.metadata-group')
-              .append('rect')
-                .attr('class','overlay')
-                .attr('y1', 0)
-                .attr('y2', height)
-                .attr('height', chartHeight)
-                .attr('width', chartWidth)
-                .attr('fill', overlayColor)
-                .style('display', 'none');
+            if (!overlay) {
+                overlay = svg.select('.metadata-group')
+                  .append('rect')
+                    .attr('class','overlay')
+                    .attr('y1', 0)
+                    .attr('y2', height)
+                    .attr('height', chartHeight)
+                    .attr('width', chartWidth)
+                    .attr('fill', overlayColor)
+                    .style('display', 'none');
+            }
         }
 
         /**
@@ -607,25 +713,27 @@ define(function(require){
          * @return void
          */
         function drawVerticalMarker(){
-            verticalMarkerContainer = svg.select('.metadata-group')
-              .append('g')
-                .attr('class', 'hover-marker vertical-marker-container')
-                .attr('transform', 'translate(9999, 0)');
+            if (!verticalMarkerContainer) {
+                verticalMarkerContainer = svg.select('.metadata-group')
+                  .append('g')
+                    .attr('class', 'hover-marker vertical-marker-container')
+                    .attr('transform', 'translate(9999, 0)');
 
-            verticalMarkerLine = verticalMarkerContainer.selectAll('path')
-                .data([{
-                    x1: 0,
-                    y1: 0,
-                    x2: 0,
-                    y2: 0
-                }])
-                .enter()
-              .append('line')
-                .classed('vertical-marker', true)
-                .attr('x1', 0)
-                .attr('y1', chartHeight)
-                .attr('x2', 0)
-                .attr('y2', 0);
+                verticalMarkerLine = verticalMarkerContainer.selectAll('path')
+                    .data([{
+                        x1: 0,
+                        y1: 0,
+                        x2: 0,
+                        y2: 0
+                    }])
+                    .enter()
+                      .append('line')
+                        .classed('vertical-marker', true)
+                        .attr('x1', 0)
+                        .attr('y1', chartHeight)
+                        .attr('x2', 0)
+                        .attr('y2', 0);
+            }
         }
 
         /**
@@ -637,15 +745,6 @@ define(function(require){
          */
         function findOutNearestDate(x0, d0, d1){
             return (new Date(x0).getTime() - new Date(d0.date).getTime()) > (new Date(d1.date).getTime() - new Date(x0).getTime()) ? d0 : d1;
-        }
-
-        /**
-         * Extract X position on the graph from a given mouse event
-         * @param  {Object} event D3 mouse event
-         * @return {Number}       Position on the x axis of the mouse
-         */
-        function getMouseXPosition(event) {
-            return d3Selection.mouse(event)[0];
         }
 
         /**
@@ -675,9 +774,10 @@ define(function(require){
          * and updates metadata related to it
          * @private
          */
-        function handleMouseMove(e, d){
-            let xPositionOffset = -margin.left, //Arbitrary number, will love to know how to assess it
-                dataPoint = getNearestDataPoint(getMouseXPosition(e) + xPositionOffset),
+        function handleMouseMove(e){
+            let [xPosition, yPosition] = d3Selection.mouse(e),
+                xPositionOffset = -margin.left, //Arbitrary number, will love to know how to assess it
+                dataPoint = getNearestDataPoint(xPosition + xPositionOffset),
                 dataPointXPosition;
 
             if (dataPoint) {
@@ -687,7 +787,7 @@ define(function(require){
                 // Add data points highlighting
                 highlightDataPoints(dataPoint);
                 // Emit event with xPosition for tooltip or similar feature
-                dispatcher.call('customMouseMove', e, dataPoint, topicColorMap, dataPointXPosition);
+                dispatcher.call('customMouseMove', e, dataPoint, topicColorMap, dataPointXPosition, yPosition);
             }
         }
 
@@ -716,6 +816,15 @@ define(function(require){
         }
 
         /**
+         * Mouseclick handler over one of the highlight points
+         * It will only pass the information with the event
+         * @private
+         */
+        function handleHighlightClick(e, d) {
+            dispatcher.call('customDataEntryClick', e, d, d3Selection.mouse(e));
+        }
+
+        /**
          * Creates coloured circles marking where the exact data y value is for a given data point
          * @param  {Object} dataPoint Data point to extract info from
          * @private
@@ -723,27 +832,99 @@ define(function(require){
         function highlightDataPoints(dataPoint) {
             cleanDataPointHighlights();
 
+            const nodes = paths.nodes()
+            const nodesById = nodes.reduce((acc, node) => {
+                acc[node.id] = node
+
+                return acc;
+            }, {});
+
+            // Group corresponding path node with its topic, and
             // sorting the topics based on the order of the colors,
             // so that the order always stays constant
-            dataPoint.topics = dataPoint.topics
-                                    .filter(t => !!t)
-                                    .sort((a, b) => topicColorMap[a.name] < topicColorMap[b.name]);
+            const topicsWithNode = dataPoint.topics
+                                        .map(topic => ({
+                                            topic,
+                                            node: nodesById[topic.name]
+                                        }))
+                                        .filter(({topic}) => !!topic)
+                                        .sort((a, b) => topicColorMap[a.topic.name] < topicColorMap[b.topic.name])
 
-            dataPoint.topics.forEach(({name}, index) => {
+            dataPoint.topics = topicsWithNode.map(({topic}) => topic);
+
+            dataPoint.topics.forEach((d, index) => {
                 let marker = verticalMarkerContainer
-                                .append('g')
-                                .classed('circle-container', true),
-                    circleSize = 12;
+                              .append('g')
+                                .classed('circle-container', true)
+                                  .append('circle')
+                                    .classed('data-point-highlighter', true)
+                                    .attr('cx', highlightCircleSize)
+                                    .attr('cy', 0)
+                                    .attr('r', highlightCircleRadius)
+                                    .style('stroke-width', highlightCircleStroke)
+                                    .style('stroke', topicColorMap[d.name])
+                                    .style('cursor', 'pointer')
+                                    .on('click', function () {
+                                        addGlowFilter(this);
+                                        handleHighlightClick(this, d);
+                                    })
+                                    .on('mouseout', function () {
+                                        removeFilter(this);
+                                    });
 
-                marker.append('circle')
-                    .classed('data-point-highlighter', true)
-                    .attr('cx', circleSize)
-                    .attr('cy', 0)
-                    .attr('r', 5)
-                    .style('stroke', topicColorMap[name]);
 
-                marker.attr('transform', `translate( ${(- circleSize)}, ${(yScale(dataPoint.topics[index].value))} )` );
+                const path = topicsWithNode[index].node;
+                const x = xScale(new Date(dataPoint.topics[index].date));
+                const y = getPathYFromX(x, path, d.name);
+
+                marker.attr('transform', `translate( ${(-highlightCircleSize)}, ${y} )` );
             });
+        }
+
+        /**
+         * Finds the y coordinate of a path given an x coordinate and the line's path node.
+         * @param  {number} x The x coordinate
+         * @param  {node} path The path node element
+         * @param {*} name - The name identifier of the topic
+         * @param  {number} error The margin of error from the actual x coordinate. Default 0.01
+         * @private
+         */
+        function getPathYFromX(x, path, name, error) {
+            const key = `${name}-${x}`;
+
+            if (key in pathYCache) {
+                return pathYCache[key];
+            }
+
+            error = error || 0.01;
+
+            const maxIterations = 100;
+
+            let lengthStart = 0;
+            let lengthEnd = path.getTotalLength();
+            let point = path.getPointAtLength((lengthEnd + lengthStart) / 2);
+            let iterations = 0;
+
+            while (x < point.x - error || x > point.x + error) {
+                const midpoint = (lengthStart + lengthEnd) / 2;
+
+                point = path.getPointAtLength(midpoint);
+
+                if (x < point.x) {
+                    lengthEnd = midpoint;
+                } else {
+                    lengthStart = midpoint;
+                }
+
+                iterations += 1;
+                if (maxIterations < iterations) {
+                    break;
+                }
+            }
+
+            pathYCache[key] = point.y
+
+            return pathYCache[key]
         }
 
         /**
@@ -756,6 +937,15 @@ define(function(require){
         }
 
         /**
+         * Resets a point filter
+         * @param {DOMElement} point  Point to reset
+         */
+        function removeFilter(point) {
+            d3Selection.select(point)
+                .attr('filter', 'none');
+        }
+
+        /**
          * Determines if we should add the tooltip related logic depending on the
          * size of the chart and the tooltipThreshold variable value
          * @return {Boolean} Should we build the tooltip?
@@ -764,7 +954,7 @@ define(function(require){
             return width > tooltipThreshold;
         }
 
-        // API Methods
+        // API
 
         /**
          * Gets or Sets the aspect ratio of the chart
@@ -777,6 +967,36 @@ define(function(require){
                 return aspectRatio;
             }
             aspectRatio = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the label of the X axis of the chart
+         * @param  {String} _x Desired label for the X axis
+         * @return { (String | Module) } Current label of the X axis or Line Chart module to chain calls
+         * @public
+         */
+        exports.xAxisLabel = function(_x) {
+            if (!arguments.length) {
+                return xAxisLabel;
+            }
+            xAxisLabel = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the label of the Y axis of the chart
+         * @param  {String} _x Desired label for the Y axis
+         * @return { (String | Module) } Current label of the Y axis or Line Chart module to chain calls
+         * @public
+         */
+        exports.yAxisLabel = function(_x) {
+            if (!arguments.length) {
+                return yAxisLabel;
+            }
+            yAxisLabel = _x;
 
             return this;
         };
@@ -815,6 +1035,7 @@ define(function(require){
          * Exposes the ability to force the chart to show a certain x axis grouping
          * @param  {String} _x Desired format
          * @return { (String|Module) }    Current format or module to chain calls
+         * @public
          * @example
          *     line.xAxisFormat(line.axisTimeCombinations.HOUR_DAY)
          */
@@ -833,6 +1054,7 @@ define(function(require){
          * NOTE: localization not supported
          * @param  {String} _x              Desired format for x axis
          * @return { (String|Module) }      Current format or module to chain calls
+         * @public
          */
         exports.xAxisCustomFormat = function(_x) {
             if (!arguments.length) {
@@ -850,6 +1072,7 @@ define(function(require){
          *
          * @param  {Number} _x              Desired number of x axis ticks (multiple of 2, 5 or 10)
          * @return { (Number|Module) }      Current number or ticks or module to chain calls
+         * @public
          */
         exports.xTicks = function(_x) {
             if (!arguments.length) {
@@ -912,6 +1135,21 @@ define(function(require){
         };
 
         /**
+         * Gets or Sets the loading state of the chart
+         * @param  {string} markup Desired markup to show when null data
+         * @return { loadingState | module} Current loading state markup or Chart module to chain calls
+         * @public
+         */
+        exports.loadingState = function(_markup) {
+            if (!arguments.length) {
+                return loadingState;
+            }
+            loadingState = _markup;
+
+            return this;
+        };
+
+        /**
          * Gets or Sets the margin of the chart
          * @param  {Object} _x Margin object to get/set
          * @return { (Number | Module) } Current margin or Line Chart module to chain calls
@@ -922,6 +1160,38 @@ define(function(require){
                 return margin;
             }
             margin = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the number format of the line chart
+         * @param  {string} _x Desired number format for the line chart
+         * @return {numberFormat | module} Current numberFormat or Chart module to chain calls
+         * @public
+         */
+        exports.numberFormat = function(_x) {
+            if (!arguments.length) {
+                return numberFormat;
+            }
+            numberFormat = _x;
+
+            return this;
+        }
+
+        /**
+         * Gets or Sets the curve of the line chart
+         * @param  {curve} _x Desired curve for the lines, default 'linear'. Other options are:
+         * basis, natural, monotoneX, monotoneY, step, stepAfter, stepBefore, cardinal, and
+         * catmullRom. Visit https://github.com/d3/d3-shape#curves for more information.
+         * @return { (curve | Module) } Current line curve or Line Chart module to chain calls
+         * @public
+         */
+        exports.lineCurve = function(_x) {
+            if (!arguments.length) {
+                return lineCurve;
+            }
+            lineCurve = _x;
 
             return this;
         };
@@ -1027,6 +1297,7 @@ define(function(require){
          * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat
          * @param  {String} _x  must be a language tag (BCP 47) like 'en-US' or 'fr-FR'
          * @return { (String|Module) }    Current locale or module to chain calls
+         * @public
          */
         exports.locale = function(_x) {
             if (!arguments.length) {
@@ -1039,6 +1310,8 @@ define(function(require){
 
         /**
          * Chart exported to png and a download action is fired
+         * @param {String} filename     File title for the resulting picture
+         * @param {String} title        Title to add at the top of the exported picture
          * @public
          */
         exports.exportChart = function(filename, title) {
@@ -1048,7 +1321,7 @@ define(function(require){
         /**
          * Exposes an 'on' method that acts as a bridge with the event dispatcher
          * We are going to expose this events:
-         * customMouseHover, customMouseMove and customMouseOut
+         * customMouseHover, customMouseMove, customMouseOut and customDataEntryClick
          *
          * @return {module} Bar Chart
          * @public

@@ -5,7 +5,9 @@ define(function(require) {
     const constants = require('./constants.js');
     const serializeWithStyles = require('./serializeWithStyles.js');
 
-    let encoder = window.btoa;
+    const isBrowser = (typeof window !== 'undefined');
+
+    let encoder = isBrowser && window.btoa;
 
     if (!encoder) {
         encoder = require('base-64').encode;
@@ -144,7 +146,7 @@ define(function(require) {
      */
     function formatHtmlByBrowser(html) {
         if (navigator.userAgent.search('FireFox') > -1) {
-            return html.replace(/url.*&quot;\)/, `url(&quot;#${constants.lineGradientId}&quot;);`);
+            return html.replace(/url.*&quot;\)/, `url(&quot;linearGradient[id*="-gradient-"]&quot;);`);
         }
 
         return html;

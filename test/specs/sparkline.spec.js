@@ -13,16 +13,23 @@ define([
     ) {
     'use strict';
 
+    const aTestDataSet = () => new dataBuilder.SparklineDataBuilder();    
+    const buildDataSet = (dataSetName) => {
+        return aTestDataSet()
+            [dataSetName]()
+            .build();
+    };
+
+    const hasClass = (element, className) => {
+        return _.contains(element[0][0].classList, className);
+    };
+
+    const hasIdWithPrefix = (element, prefix) => {
+        return element.id.match(prefix) !== null;
+    };
+
     describe('Sparkline Chart', () => {
         let dataset, containerFixture, f, sparklineChart;
-
-        function aTestDataSet() {
-            return new dataBuilder.SparklineDataBuilder();
-        }
-
-        function hasClass(element, className) {
-            return _.contains(element[0][0].classList, className);
-        }
 
         beforeEach(() => {
             dataset = aTestDataSet().with1Source().build();
@@ -55,19 +62,82 @@ define([
         });
 
         it('should render a sparkline', () => {
-            expect(containerFixture.selectAll('.sparkline').empty()).toEqual(false);
+            let expected = 1;
+            let actual = containerFixture.selectAll('.sparkline').nodes().length;
+
+            expect(actual).toEqual(expected);
         });
 
         it('should create a gradient for the area', () => {
-            expect(containerFixture.selectAll('#sparkline-area-gradient').empty()).toEqual(false);
+            let expected = 1;
+            let actual = _.filter(containerFixture.selectAll('.area-gradient').nodes(), f => f && hasIdWithPrefix(f, 'sparkline-area-gradient')).length;
+
+            expect(actual).toEqual(expected);
         });
 
         it('should render the sparkline area', () => {
-            expect(containerFixture.selectAll('.sparkline-area').empty()).toEqual(false);
+            let expected = 1;
+            let actual = containerFixture.selectAll('.sparkline-area').nodes().length;
+            
+            expect(actual).toEqual(expected);
         });
 
         it('should create a gradient for the line', () => {
-            expect(containerFixture.selectAll('#sparkline-line-gradient').empty()).toEqual(false);
+            let expected = 1;
+            let actual = _.filter(containerFixture.selectAll('.line-gradient').nodes(), f => f && hasIdWithPrefix(f, 'sparkline-line-gradient')).length;
+
+            expect(actual).toEqual(expected);
+        });
+
+        describe('when reloading with a different dataset', () => {
+            
+            it('should render in the same svg', function() {
+                let actual;
+                let expected = 1;
+                let newDataset = buildDataSet('withLowValues');
+
+                containerFixture.datum(newDataset.data).call(sparklineChart);
+
+                actual = containerFixture.selectAll('.sparkline').nodes().length;
+
+                expect(actual).toEqual(expected);
+            });
+
+            it('should render one line', function() {
+                let actual;
+                let expected = 1;
+                let newDataset = buildDataSet('withLowValues');
+
+                containerFixture.datum(newDataset.data).call(sparklineChart);
+
+                actual = containerFixture.selectAll('.sparkline .line').nodes().length;
+
+                expect(actual).toEqual(expected);
+            });
+
+            it('should render one area', function() {
+                let actual;
+                let expected = 1;
+                let newDataset = buildDataSet('withLowValues');
+
+                containerFixture.datum(newDataset.data).call(sparklineChart);
+
+                actual = containerFixture.selectAll('.sparkline .sparkline-area').nodes().length;
+
+                expect(actual).toEqual(expected);
+            });
+
+            it('should render one end circle', function() {
+                let actual;
+                let expected = 1;
+                let newDataset = buildDataSet('withLowValues');
+
+                containerFixture.datum(newDataset.data).call(sparklineChart);
+
+                actual = containerFixture.selectAll('.sparkline .sparkline-circle').nodes().length;
+
+                expect(actual).toEqual(expected);
+            });
         });
 
         describe('when isAnimated is true', () => {
@@ -76,7 +146,10 @@ define([
                 sparklineChart.isAnimated(true);
                 containerFixture.datum(dataset.data).call(sparklineChart);
 
-                expect(containerFixture.selectAll('#maskingClip').empty()).toEqual(false);
+                let expected = 1;
+                let actual = _.filter(containerFixture.selectAll('.clip-path').nodes(), f => f && hasIdWithPrefix(f, 'maskingClip')).length;
+
+                expect(actual).toEqual(expected);
             });
         });
 
@@ -92,6 +165,18 @@ define([
 
                 expect(defaultMargin).not.toBe(testMargin);
                 expect(newMargin).toBe(testMargin);
+            });
+
+            it('should provide loadingState getter and setter', () => {
+                let previous = sparklineChart.loadingState(),
+                    expected = 'test',
+                    actual;
+
+                sparklineChart.loadingState(expected);
+                actual = sparklineChart.loadingState();
+
+                expect(previous).not.toBe(actual);
+                expect(actual).toBe(expected);
             });
 
             it('should provide width getter and setter', () => {

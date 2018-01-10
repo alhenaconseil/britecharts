@@ -2,6 +2,12 @@ define(['d3', 'grouped-bar', 'groupedBarChartDataBuilder'], function(d3, chart, 
     'use strict';
 
     const aTestDataSet = () => new dataBuilder.GroupedBarChartDataBuilder();
+    const buildDataSet = (dataSetName) => {
+        return aTestDataSet()
+            [dataSetName]()
+            .build();
+    };
+
     const differentDatesReducer = (acc, d) => {
                 if (acc.indexOf(d.date) === -1) {
                     acc.push(d.date);
@@ -14,9 +20,7 @@ define(['d3', 'grouped-bar', 'groupedBarChartDataBuilder'], function(d3, chart, 
         let groupedBarChart, dataset, containerFixture, f;
 
         beforeEach(() => {
-            dataset = aTestDataSet()
-                .with3Sources()
-                .build();
+            dataset = buildDataSet('with3Sources');
             groupedBarChart = chart()
                         .groupLabel('stack')
                         .nameLabel('date')
@@ -74,6 +78,45 @@ define(['d3', 'grouped-bar', 'groupedBarChartDataBuilder'], function(d3, chart, 
             let expected = dataset.data.length;
 
             expect(actual).toEqual(expected);
+        });
+
+        describe('when reloading with a two sources dataset', () => {
+
+            it('should render in the same svg', function() {
+                let actual;
+                let expected = 1;
+                let newDataset = buildDataSet('with2Sources');
+
+                containerFixture.datum(newDataset.data).call(groupedBarChart);
+
+                actual = containerFixture.selectAll('.grouped-bar').nodes().length;
+
+                expect(actual).toEqual(expected);
+            });
+
+            it('should render four layers', function() {
+                let actual;
+                let expected = 4;
+                let newDataset = buildDataSet('with2Sources');
+
+                containerFixture.datum(newDataset.data).call(groupedBarChart);
+
+                actual = containerFixture.selectAll('.grouped-bar .layer').nodes().length;
+
+                expect(actual).toEqual(expected);
+            });
+
+            it('should render eight bars total', () => {
+                let actual;
+                let expected = 8;
+                let newDataset = buildDataSet('with2Sources');
+
+                containerFixture.datum(newDataset.data).call(groupedBarChart);
+
+                actual = containerFixture.selectAll('.grouped-bar .bar').nodes().length;
+
+                expect(actual).toEqual(expected);
+            });
         });
 
         describe('API', function() {
@@ -163,6 +206,18 @@ define(['d3', 'grouped-bar', 'groupedBarChartDataBuilder'], function(d3, chart, 
                 actual = groupedBarChart.isAnimated();
 
                 expect(previous).not.toBe(expected);
+                expect(actual).toBe(expected);
+            });
+
+            it('should provide loadingState getter and setter', () => {
+                let previous = groupedBarChart.loadingState(),
+                    expected = 'test',
+                    actual;
+
+                groupedBarChart.loadingState(expected);
+                actual = groupedBarChart.loadingState();
+
+                expect(previous).not.toBe(actual);
                 expect(actual).toBe(expected);
             });
 
@@ -257,6 +312,22 @@ define(['d3', 'grouped-bar', 'groupedBarChartDataBuilder'], function(d3, chart, 
 
                 groupedBarChart.width(expected);
                 actual = groupedBarChart.width();
+
+                expect(previous).not.toBe(actual);
+                expect(actual).toBe(expected);
+            });
+
+            it('should provide yTickTextOffset getter and setter', () => {
+                let previous = groupedBarChart.yTickTextOffset(),
+                    expected =
+                    {
+                        x: -20,
+                        y: -8
+                    },
+                    actual;
+
+                groupedBarChart.yTickTextOffset(expected);
+                actual = groupedBarChart.yTickTextOffset();
 
                 expect(previous).not.toBe(actual);
                 expect(actual).toBe(expected);

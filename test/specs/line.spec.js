@@ -13,21 +13,24 @@ define([
     ) {
         'use strict';
 
-        function aTestDataSet() {
-            return new dataBuilder.LineDataBuilder();
-        }
+        const aTestDataSet = () => new dataBuilder.LineDataBuilder();
+        const buildDataSet = (dataSetName) => {
+            return aTestDataSet()
+                [dataSetName]()
+                .build();
+        };
 
-        function hasClass(element, className) {
+        const hasClass = (element, className) => {
             return _.contains(element.node().classList, className);
-        }
+        };
 
         describe('Line Chart', () => {
             let dataset, containerFixture, f, lineChart;
 
-            describe('when a single line', function() {
+            describe('when a single line of zeroes', () => {
 
                 beforeEach(() => {
-                    dataset = aTestDataSet().withOneSource().build();
+                    dataset = aTestDataSet().withAllZeroes().build();
                     lineChart = chart();
 
                     // DOM Fixture Setup
@@ -48,18 +51,26 @@ define([
 
                 describe('on render', () => {
 
-                    it('should have a unique gradient stroke on the chart line', () => {
-                        let stroke = containerFixture.select('.chart-group').selectAll('path').node().style.stroke;
+                    it('should have one line on the chart line', () => {
+                        let expected = 1,
+                            actual = containerFixture.select('.chart-group').selectAll('path').nodes().length;
 
-                        expect(stroke).toEqual(jasmine.stringMatching(/^url\("#lineGradientId[0-9]+"\)$/));
+                        expect(actual).toEqual(expected);
+                    });
+
+                    it('should have a gradient stroke on the chart line', () => {
+                        let actual = containerFixture.select('.chart-group').selectAll('path').node().style.stroke.match('one-line-gradient').length,
+                            expected = 1;
+
+                        expect(actual).toEqual(expected);
                     });
                 });
             });
 
-            describe('when multiple lines', function() {
+            describe('when multiple lines', () => {
 
                 beforeEach(() => {
-                    dataset = aTestDataSet().with5Topics().build();
+                    dataset = buildDataSet('with5Topics');
                     lineChart = chart();
 
                     // DOM Fixture Setup
@@ -147,7 +158,6 @@ define([
                 //     expect(callback.calls.count()).toBe(1);
                 // });
 
-                // Overlay
                 it('should render an overlay to trigger the hover effect', () => {
                     expect(containerFixture.select('.overlay').empty()).toBeFalsy();
                 });
@@ -160,7 +170,6 @@ define([
                     expect(containerFixture.select('.overlay').style('display')).toBe('block');
                 });
 
-                // Vertical Marker
                 it('should render a vertical marker and its container', () => {
                     expect(containerFixture.select('.hover-marker').empty()).toBeFalsy();
                     expect(containerFixture.select('.vertical-marker').empty()).toBeFalsy();
@@ -185,9 +194,36 @@ define([
                     container.dispatch('mouseout');
                     expect(hasClass(verticalLine, 'bc-is-active')).toBe(false);
                 });
+
+                describe('when reloading with a different dataset', () => {
+
+                    it('should render in the same svg', function() {
+                        let actual;
+                        let expected = 1;
+                        let newDataset = buildDataSet('withOneSource');
+
+                        containerFixture.datum(newDataset).call(lineChart);
+
+                        actual = containerFixture.selectAll('.line-chart').nodes().length;
+
+                        expect(actual).toEqual(expected);
+                    });
+
+                    it('should render one line', function() {
+                        let actual;
+                        let expected = 1;
+                        let newDataset = buildDataSet('withOneSource');
+
+                        containerFixture.datum(newDataset).call(lineChart);
+
+                        actual = containerFixture.selectAll('.line-chart .line').nodes().length;
+
+                        expect(actual).toEqual(expected);
+                    });
+                });
             });
 
-            describe('when different date ranges', function() {
+            describe('when different date ranges', () => {
 
                 beforeEach(() => {
                     dataset = aTestDataSet().withHourDateRange().build();
@@ -223,7 +259,7 @@ define([
                 });
             });
 
-            describe('API', function() {
+            describe('API', () => {
 
                 it('should provide an axisTimeCombinations accessor', () => {
                     let axisTimeCombinations = lineChart.axisTimeCombinations;
@@ -232,7 +268,8 @@ define([
                         MINUTE_HOUR: 'minute-hour',
                         HOUR_DAY: 'hour-daymonth',
                         DAY_MONTH: 'day-month',
-                        MONTH_YEAR: 'month-year'
+                        MONTH_YEAR: 'month-year',
+                        CUSTOM: 'custom'
                     });
                 });
 
@@ -255,6 +292,27 @@ define([
 
                     lineChart.width(expected);
                     actual = lineChart.width();
+
+                    expect(previous).not.toBe(expected);
+                    expect(actual).toBe(expected);
+                });
+
+                it('should not have numberFormat by default', () => {
+                    let expected = undefined,
+                    actual;
+
+                    actual = lineChart.numberFormat();
+
+                    expect(expected).toBe(actual);
+                });
+
+                it('should provide numberFormat getter and setter', () =>{
+                    let previous = lineChart.numberFormat(),
+                        expected = 'd',
+                        actual;
+
+                    lineChart.numberFormat(expected);
+                    actual = lineChart.numberFormat();
 
                     expect(previous).not.toBe(expected);
                     expect(actual).toBe(expected);
@@ -409,6 +467,18 @@ define([
                     expect(actual).toBe(expected);
                 });
 
+                it('should provide lineCurve getter and setter', () => {
+                    let previous = lineChart.lineCurve(),
+                        expected = 'basis',
+                        actual;
+
+                    lineChart.lineCurve(expected);
+                    actual = lineChart.lineCurve();
+
+                    expect(previous).not.toBe(expected);
+                    expect(actual).toBe(expected);
+                });
+
                 it('should provide lineGradient getter and setter', () => {
                     let previous = lineChart.lineGradient(),
                         expected = ['#ddd', '#ccc'],
@@ -418,6 +488,18 @@ define([
                     actual = lineChart.lineGradient();
 
                     expect(previous).not.toBe(expected);
+                    expect(actual).toBe(expected);
+                });
+
+                it('should provide loadingState getter and setter', () => {
+                    let previous = lineChart.loadingState(),
+                        expected = 'test',
+                        actual;
+
+                    lineChart.loadingState(expected);
+                    actual = lineChart.loadingState();
+
+                    expect(previous).not.toBe(actual);
                     expect(actual).toBe(expected);
                 });
 
@@ -432,9 +514,45 @@ define([
                     expect(previous).not.toBe(expected);
                     expect(actual).toBe(expected);
                 });
+
+                it('should provide locale getter and setter', () => {
+                    let previous = lineChart.locale(),
+                        expected = 'en-US',
+                        actual;
+
+                    lineChart.locale(expected);
+                    actual = lineChart.locale();
+
+                    expect(previous).not.toBe(expected);
+                    expect(actual).toBe(expected);
+                });
+
+                it('should provide xAxisLabel getter and setter', () => {
+                    let previous = lineChart.xAxisLabel(),
+                        expected = 'valueSet',
+                        actual;
+
+                    lineChart.xAxisLabel(expected);
+                    actual = lineChart.xAxisLabel();
+
+                    expect(previous).not.toBe(expected);
+                    expect(actual).toBe(expected);
+                });
+
+                it('should provide yAxisLabel getter and setter', () => {
+                    let previous = lineChart.yAxisLabel(),
+                        expected = 'valueSet',
+                        actual;
+
+                    lineChart.yAxisLabel(expected);
+                    actual = lineChart.yAxisLabel();
+
+                    expect(previous).not.toBe(expected);
+                    expect(actual).toBe(expected);
+                });
             });
 
-            describe('Aspect Ratio', function() {
+            describe('Aspect Ratio', () => {
 
                 describe('when an aspect ratio is set', function() {
 
@@ -471,7 +589,7 @@ define([
                 });
             });
 
-            describe('Grid', function() {
+            describe('Grid', () => {
 
                 beforeEach(() => {
                     dataset = aTestDataSet().with5Topics().build();
@@ -531,6 +649,83 @@ define([
                     it('should render the vertical grid lines', () => {
                         expect(containerFixture.select('.horizontal-grid-line').empty()).toBeFalsy();
                         expect(containerFixture.select('.vertical-grid-line').empty()).toBeFalsy();
+                    });
+                });
+            });
+
+            describe('Axis Labels', () => {
+                describe('when axis labels aren\'t set', () => {
+    
+                    beforeEach(() => {
+                        dataset = aTestDataSet().withOneSource().build();
+                        lineChart = chart();
+                        // DOM Fixture Setup
+                        f = jasmine.getFixtures();
+                        f.fixturesPath = 'base/test/fixtures/';
+                        f.load('testContainer.html');
+    
+                        containerFixture = d3.select('.test-container');
+                        containerFixture.datum(dataset).call(lineChart);
+                    });
+    
+                    afterEach(() => {
+                        containerFixture.remove();
+                        f = jasmine.getFixtures();
+                        f.cleanUp();
+                        f.clearCache();
+                    });
+    
+                    it('should not render the x-axis label', () => {
+                        let expected = 0,
+                            actual = containerFixture.selectAll('.x-axis-label')['_groups'][0].length;
+    
+                        expect(actual).toEqual(expected);
+                    });
+    
+                    it('should not render any axisLabel', () => {
+                        let expected = 0,
+                            actual = containerFixture.selectAll('.y-axis-label')['_groups'][0].length;
+    
+                        expect(actual).toEqual(expected);
+                    });
+                });
+    
+                describe('when axis labels are set', () => {
+    
+                    beforeEach(() => {
+                        dataset = aTestDataSet().withOneSource().build();
+                        lineChart = chart()
+                                        .xAxisLabel('valueSetX')
+                                        .yAxisLabel('valueSetY');
+    
+                        // DOM Fixture Setup
+                        f = jasmine.getFixtures();
+                        f.fixturesPath = 'base/test/fixtures/';
+                        f.load('testContainer.html');
+    
+                        containerFixture = d3.select('.test-container');
+                        containerFixture.datum(dataset).call(lineChart);
+                    });
+    
+                    afterEach(() => {
+                        containerFixture.remove();
+                        f = jasmine.getFixtures();
+                        f.cleanUp();
+                        f.clearCache();
+                    });
+    
+                    it('should render the x-axis label', () => {
+                        let expected = 1,
+                            actual = containerFixture.selectAll('.x-axis-label')['_groups'][0].length;
+    
+                        expect(actual).toEqual(expected);
+                    });
+    
+                    it('should render any axisLabel', () => {
+                        let expected = 1,
+                            actual = containerFixture.selectAll('.y-axis-label')['_groups'][0].length;
+    
+                        expect(actual).toEqual(expected);
                     });
                 });
             });

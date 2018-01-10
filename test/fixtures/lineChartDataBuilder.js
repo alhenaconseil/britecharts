@@ -3,12 +3,13 @@ define(function(require) {
 
     var _ = require('underscore'),
 
-        jsonAllDatas = require('json!../json/lineDataAllDatas.json'),
-        jsonFiveTopics = require('json!../json/lineDataFiveTopics.json'),
-        jsonOneSource = require('json!../json/lineDataOneSet.json'),
-        jsonMultiMonthValueRange = require('json!../json/multiMonthLineData'),
-        jsonHourDateRange = require('json!../json/lineDataOneSetHourly.json'),
-        jsonSmallValueRange = require('json!../json/lineDataSmallValueRange');
+        jsonAllDatas = require('json-loader!../json/lineDataAllDatas.json'),
+        jsonFiveTopics = require('json-loader!../json/lineDataFiveTopics.json'),
+        jsonOneSource = require('json-loader!../json/lineDataOneSet.json'),
+        jsonAllZeroes = require('json-loader!../json/lineDataAllZeroes.json'),
+        jsonMultiMonthValueRange = require('json-loader!../json/multiMonthLineData'),
+        jsonHourDateRange = require('json-loader!../json/lineDataOneSetHourly.json'),
+        jsonSmallValueRange = require('json-loader!../json/lineDataSmallValueRange');
 
 
     function LineDataBuilder(config) {
@@ -51,16 +52,9 @@ define(function(require) {
 
             return new this.Klass(attributes);
         };
-
-        /**
-         * Sets the path for fetching the data
-         * @param  {string} path Desired path for test data
-         * @return {LineDataBuilder}      Builder object
-         */
-        this.withPath = function(path){
-            var attributes = _.extend({}, this.config, {
-                jsonURL: path
-            });
+        
+        this.withAllZeroes = function() {
+            var attributes = _.extend({}, this.config, jsonAllZeroes);
 
             return new this.Klass(attributes);
         };

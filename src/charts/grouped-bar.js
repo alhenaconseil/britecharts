@@ -15,6 +15,8 @@ define(function (require) {
 
     const { exportChart } = require('./helpers/exportChart');
     const colorHelper = require('./helpers/colors');
+    const {bar} = require('./helpers/loadingStates');
+    
     const NUMBER_FORMAT = ',f';
     const uniq = (arrArg) => arrArg.filter((elem, pos, arr) => arr.indexOf(elem) == pos);
 
@@ -26,22 +28,19 @@ define(function (require) {
 
     /**
      * @typedef GroupedBarChartData
-     * @type {Object}
-     * @property {Object[]} data       All data entries
+     * @type {Object[]}
      * @property {String} name         Name of the entry
      * @property {String} group        group of the entry
      * @property {Number} value        Value of the entry
      *
      * @example
-     * {
-     *     'data': [
-     *         {
-     *             "name": "2011-01",
-     *             "group": "Direct",
-     *             "value": 0
-     *         }
-     *     ]
-     * }
+     * [
+     *     {
+     *         "name": "2011-01",
+     *         "group": "Direct",
+     *         "value": 0
+     *     }
+     * ]
      */
 
     /**
@@ -74,6 +73,7 @@ define(function (require) {
             },
             width = 960,
             height = 500,
+            loadingState = bar,
 
             xScale,
             xScale2,
@@ -84,8 +84,10 @@ define(function (require) {
 
             aspectRatio = null,
 
-            yTickTextYOffset = -8,
-            yTickTextXOffset = -20,
+            yTickTextOffset = {
+                y: -8,
+                x: -20
+            },
 
             yTicks = 5,
             xTicks = 5,
@@ -105,6 +107,7 @@ define(function (require) {
             chartWidth, chartHeight,
             data,
             groups,
+            layerElements,
 
             transformedData,
 
@@ -117,6 +120,7 @@ define(function (require) {
                 right: 0
             },
             maxBarNumber = 8,
+            barOpacity = 0.24,
 
             animationDelayStep = 20,
             animationDelays = d3Array.range(animationDelayStep, maxBarNumber * animationDelayStep, animationDelayStep),
@@ -196,7 +200,7 @@ define(function (require) {
          */
         function adjustYTickLabels(selection) {
             selection.selectAll('.tick text')
-                .attr('transform', `translate(${yTickTextXOffset}, ${yTickTextYOffset})`);
+                .attr('transform', `translate(${yTickTextOffset['x']}, ${yTickTextOffset['y']})`);
         }
 
         /**
@@ -334,20 +338,22 @@ define(function (require) {
         }
 
         /**
-         * Parses dates and values into JS Date objects and numbers
-         * @param  {obj} data Raw data from JSON file
-         * @return {obj}      Parsed data with values and dates
+         * Cleaning data casting the values, groups, topic names and names to the proper type while keeping
+         * the rest of properties on the data
+         * @param  {GroupedBarChartData} originalData   Raw data from the container
+         * @return {GroupedBarChartData}                Parsed data with values and dates
+         * @private
          */
-        function cleanData(data) {
-            return data.map((d) => {
+        function cleanData(originalData) {
+            return originalData.reduce((acc, d) => {
                     d.value = +d[valueLabel];
                     d.group = d[groupLabel];
                     // for tooltip
                     d.topicName = getGroup(d);
                     d.name = d[nameLabel];
 
-                    return d;
-                });
+                    return [...acc, d];
+                }, []);
         }
 
         /**
@@ -452,64 +458,76 @@ define(function (require) {
 
         /**
          * Draws the bars along the x axis
-         * @param  {D3Selection} bars Selection of bars
+         * @param  {D3Selection} layersSelection Selection of layers
          * @return {void}
          */
-        function drawHorizontalBars(series) {
-            // Enter + Update
-            let bars = series
-                .data(layers)
+        function drawHorizontalBars(layersSelection) {
+            let layerJoin = layersSelection
+                .data(layers);
+
+            layerElements = layerJoin
                 .enter()
                   .append('g')
-                    .attr('transform', function ({key}) { return `translate(0,${yScale(key)})`; })
-                    .classed('layer', true)
-                    .selectAll('.bar')
-                    .data(({values}) => values)
+                    .attr('transform', ({key}) => `translate(0,${yScale(key)})`)
+                    .classed('layer', true);
+
+            let barJoin = layerElements
+                .selectAll('.bar')
+                .data(({values}) => values);
+
+            // Enter + Update
+            let bars = barJoin
                     .enter()
                       .append('rect')
                         .classed('bar', true)
                         .attr('x', 1)
                         .attr('y', (d) => yScale2(getGroup(d)))
                         .attr('height', yScale2.bandwidth())
-                        .attr('fill', ((data) => categoryColorMap[data.group]));
+                        .attr('fill', (({group}) => categoryColorMap[group]));
 
             if (isAnimated) {
-                bars.style('opacity', 0.24)
+                bars.style('opacity', barOpacity)
                     .transition()
                     .delay((_, i) => animationDelays[i])
                     .duration(animationDuration)
                     .ease(ease)
                     .tween('attr.width', horizontalBarsTween);
             } else {
-                bars.attr('width', (d) => xScale(getValue(d)))
+                bars.attr('width', (d) => xScale(getValue(d)));
             }
         }
 
         /**
          * Draws the bars along the y axis
-         * @param  {D3Selection} bars Selection of bars
+         * @param  {D3Selection} layersSelection Selection of layers
          * @return {void}
          */
-        function drawVerticalBars(series) {
-            // Enter + Update
-            let bars = series
-                .data(layers)
+        function drawVerticalBars(layersSelection) {
+            let layerJoin = layersSelection
+                .data(layers);
+
+            layerElements = layerJoin
                 .enter()
                 .append('g')
-                  .attr('transform', function (d) { return 'translate(' + xScale(d.key) + ',0)'; })
-                  .classed('layer', true)
+                  .attr('transform', ({key}) => `translate(${xScale(key)},0)`)
+                  .classed('layer', true);
+
+            let barJoin = layerElements
                   .selectAll('.bar')
-                  .data((d) => d.values)
+                  .data(({values}) => values);
+
+            let bars = barJoin
                   .enter()
                     .append('rect')
                       .classed('bar', true)
                       .attr('x', (d) => xScale2(getGroup(d)))
-                      .attr('y', (d) => yScale(d.value))
+                      .attr('y', ({value}) => yScale(value))
                       .attr('width', xScale2.bandwidth)
-                      .attr('fill', ((data) => categoryColorMap[data.group]));
+                      .attr('fill', (({group}) => categoryColorMap[group]));
 
             if (isAnimated) {
-                bars.style('opacity', 0.24).transition()
+                bars.style('opacity', barOpacity)
+                    .transition()
                     .delay((_, i) => animationDelays[i])
                     .duration(animationDuration)
                     .ease(ease)
@@ -524,6 +542,11 @@ define(function (require) {
          * @private
          */
         function drawGroupedBar() {
+            // Not ideal, we need to figure out how to call exit for nested elements
+            if (layerElements) {
+                svg.selectAll('.layer').remove();
+            }
+
             let series = svg.select('.chart-group').selectAll('.layer');
 
             if (isHorizontal) {
@@ -531,6 +554,7 @@ define(function (require) {
             } else {
                 drawVerticalBars(series);
             }
+
             // Exit
             series.exit()
                 .transition()
@@ -621,10 +645,9 @@ define(function (require) {
          * MouseMove handler, calculates the nearest dataPoint to the cursor
          * and updates metadata related to it
          * @param  {obj} e the fired event
-         * @param  {obj} d data of bar
          * @private
          */
-        function handleMouseMove(e, d) {
+        function handleMouseMove(e) {
             let [mouseX, mouseY] = getMousePosition(e),
                 dataPoint = isHorizontal ? getNearestDataPoint2(mouseY) : getNearestDataPoint(mouseX),
                 x,
@@ -675,7 +698,8 @@ define(function (require) {
                 j = d3Interpolate.interpolateNumber(0, 1);
 
             return function (t) {
-                node.attr('width', i(t)).style('opacity', j(t));
+                node.attr('width', i(t))
+                    .style('opacity', j(t));
             }
         }
 
@@ -779,6 +803,8 @@ define(function (require) {
 
         /**
          * Chart exported to png and a download action is fired
+         * @param {String} filename     File title for the resulting picture
+         * @param {String} title        Title to add at the top of the exported picture
          * @public
          */
         exports.exportChart = function (filename, title) {
@@ -850,22 +876,6 @@ define(function (require) {
         };
 
         /**
-         * Gets or Sets the horizontal direction of the chart
-         * @param  {number} _x Desired horizontal direction for the chart
-         * @return { isHorizontal | module} If it is horizontal or module to chain calls
-         * @deprecated
-         */
-        exports.horizontal = function (_x) {
-            if (!arguments.length) {
-                return isHorizontal;
-            }
-            isHorizontal = _x;
-            console.log('We are deprecating the .horizontal() accessor, use .isHorizontal() instead');
-
-            return this;
-        };
-
-        /**
          * Gets or Sets the isAnimated property of the chart, making it to animate when render.
          * By default this is 'false'
          *
@@ -878,6 +888,21 @@ define(function (require) {
                 return isAnimated;
             }
             isAnimated = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the loading state of the chart
+         * @param  {string} markup Desired markup to show when null data
+         * @return { loadingState | module} Current loading state markup or Chart module to chain calls
+         * @public
+         */
+        exports.loadingState = function(_markup) {
+            if (!arguments.length) {
+                return loadingState;
+            }
+            loadingState = _markup;
 
             return this;
         };
@@ -1017,6 +1042,21 @@ define(function (require) {
                 return xTicks;
             }
             xTicks = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the x and y offset of ticks of the y axis on the chart
+         * @param  {Object} _x Desired offset
+         * @return {Object | module} Current offset or Chart module to chain calls
+         * @public
+         */
+        exports.yTickTextOffset = function (_x) {
+            if (!arguments.length) {
+                return yTickTextOffset;
+            }
+            yTickTextOffset = _x;
 
             return this;
         };

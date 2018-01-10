@@ -11,6 +11,7 @@ define(function(require) {
     const d3Transition = require('d3-transition');
 
     const {exportChart} = require('./helpers/exportChart');
+    const {line} = require('./helpers/loadingStates');
 
 
     /**
@@ -64,14 +65,19 @@ define(function(require) {
             },
             width = 960,
             height = 500,
+            loadingState = line,
             ease = d3Ease.easeQuadInOut,
             data,
             chartWidth, chartHeight,
             xScale, yScale,
             yTicks = 6,
-            xAxis, xAxisLabel,
-            yAxis, yAxisLabel,
-            xAxisLabelOffset = 45,
+            xAxis, 
+            xAxisLabel,
+            xAxisLabelEl,
+            yAxis, 
+            yAxisLabel,
+            yAxisLabelEl,
+            xAxisLabelOffset = 80,
             yAxisLabelOffset = -20,
             xAxisPadding = {
                 top: 0,
@@ -201,17 +207,18 @@ define(function(require) {
         }
 
         /**
-         * Cleaning data adding the proper format
-         * @param  {StepChartData} data Data
+         * Cleaning data casting the values and keys to the proper type while keeping 
+         * the rest of properties on the data
+         * @param  {StepChartData} originalData Data as provided on the container
          * @private
          */
-        function cleanData(data) {
-            return data.map((d) => {
+        function cleanData(originalData) {
+            return originalData.reduce((acc, d) => {
                 d.value = +d[valueLabel];
                 d.key = String(d[nameLabel]);
 
-                return d;
-            });
+                return [...acc, d];
+            }, []);
         }
 
         /**
@@ -224,21 +231,33 @@ define(function(require) {
                 .attr('transform', `translate(0, ${chartHeight})`)
                 .call(xAxis);
 
+            svg.selectAll('.x-axis-group .tick text')
+                .style('text-anchor', 'start')        
+                .attr('transform', 'rotate(45 -1 10)');
+
             if (xAxisLabel) {
-                svg.select('.x-axis-label')
+                if (xAxisLabelEl) {
+                    svg.selectAll('.x-axis-label-text').remove();
+                }
+                xAxisLabelEl = svg.select('.x-axis-label')
                   .append('text')
-                    .attr('text-anchor', 'middle')
-                    .attr('x', chartWidth / 2)
                     .attr('y', xAxisLabelOffset)
+                    .attr('text-anchor', 'middle')
+                    .classed('x-axis-label-text', true)
+                    .attr('x', chartWidth / 2)
                     .text(xAxisLabel);
             }
-
+                
             svg.select('.y-axis-group.axis')
                 .call(yAxis);
-
+                
             if (yAxisLabel) {
-                svg.select('.y-axis-label')
+                if (yAxisLabelEl) {
+                    svg.selectAll('.y-axis-label-text').remove();
+                }
+                yAxisLabelEl = svg.select('.y-axis-label')
                   .append('text')
+                    .classed('y-axis-label-text', true)
                     .attr('x', -chartHeight / 2)
                     .attr('y', yAxisLabelOffset)
                     .attr('text-anchor', 'middle')
@@ -295,6 +314,13 @@ define(function(require) {
          * @return void
          */
         function drawGridLines(){
+            if (maskGridLines) {
+                svg.selectAll('.horizontal-grid-line').remove();
+            }
+            if (baseLine) {
+                svg.selectAll('.extended-x-line').remove();
+            }
+
             maskGridLines = svg.select('.grid-lines-group')
                 .selectAll('line.horizontal-grid-line')
                 .data(yScale.ticks(yTicks))
@@ -306,6 +332,10 @@ define(function(require) {
                     .attr('y1', (d) => yScale(d))
                     .attr('y2', (d) => yScale(d));
 
+            if (baseLine) {
+                svg.selectAll('.extended-x-line').remove();
+            }
+        
             //draw a horizontal line to extend x-axis till the edges
             baseLine = svg.select('.grid-lines-group')
                 .selectAll('line.extended-x-line')
@@ -315,8 +345,8 @@ define(function(require) {
                     .attr('class', 'extended-x-line')
                     .attr('x1', (xAxisPadding.left))
                     .attr('x2', chartWidth)
-                    .attr('y1', height - margin.bottom - margin.top)
-                    .attr('y2', height - margin.bottom - margin.top);
+                    .attr('y1', chartHeight)
+                    .attr('y2', chartHeight);
         }
 
         // API
@@ -350,6 +380,8 @@ define(function(require) {
 
         /**
          * Chart exported to png and a download action is fired
+         * @param {String} filename     File title for the resulting picture
+         * @param {String} title        Title to add at the top of the exported picture
          * @public
          */
         exports.exportChart = function(filename) {
@@ -396,6 +428,21 @@ define(function(require) {
                 return height;
             }
             height = _x;
+            return this;
+        };
+
+        /**
+         * Gets or Sets the loading state of the chart
+         * @param  {string} markup Desired markup to show when null data
+         * @return { loadingState | module} Current loading state markup or Chart module to chain calls
+         * @public
+         */
+        exports.loadingState = function(_markup) {
+            if (!arguments.length) {
+                return loadingState;
+            }
+            loadingState = _markup;
+
             return this;
         };
 

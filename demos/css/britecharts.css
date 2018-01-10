@@ -7,6 +7,17 @@
   font-family: 'Karla', sans-serif;
   -webkit-font-smoothing: antialiased; }
 
+.line-load-state .chart-filter,
+.donut-load-state .chart-filter,
+.bar-load-state .chart-filter {
+  animation: swipe 1.5s linear infinite forwards; }
+
+@keyframes swipe {
+  from {
+    transform: translateX(-66.66%); }
+  to {
+    transform: translateX(0); } }
+
 .vertical-grid-line,
 .horizontal-grid-line {
   fill: none;
@@ -107,14 +118,12 @@
   stroke-linecap: round;
   stroke-linejoin: round; }
   .sparkline .line {
-    stroke: url(#sparkline-line-gradient);
     stroke-width: 4; }
   .sparkline .sparkline-circle {
     fill: #ff584c;
     stroke-width: 0;
     display: none; }
   .sparkline .sparkline-area {
-    fill: url(#sparkline-area-gradient);
     stroke: none; }
 
 .stacked-area .dot {
@@ -125,6 +134,18 @@
 
 .stacked-area .x-axis-group path {
   display: none; }
+
+.stacked-area .area-outline {
+  shape-rendering: geometricPrecision;
+  fill: none;
+  stroke-width: 1.2; }
+
+.stacked-area .data-point-highlighter {
+  stroke-width: 1.2; }
+
+.stacked-area .empty-data-line {
+  stroke-width: 2px;
+  stroke-linecap: round; }
 
 .stacked-bar .x-axis-group path,
 .stacked-bar .y-axis-group path {
@@ -166,7 +187,6 @@
 
 .brush-chart rect.brush-rect.selection {
   fill-opacity: 0.08;
-  fill: url("#brush-area-gradient");
   stroke-linejoin: round; }
 
 .brush-chart rect.brush-rect.handle {

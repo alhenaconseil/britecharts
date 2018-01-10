@@ -3,9 +3,11 @@ define(function(require) {
 
     var _ = require('underscore'),
 
-        jsonFivePlusOther = require('json!../json/donutDataFivePlusOther.json'),
-        jsonFivePlusOtherNoPercent = require('json!../json/donutDataFivePlusOtherNoPercent.json'),
-        jsonThreeCategories = require('json!../json/donutDataThreeCategories.json');
+        jsonFivePlusOther = require('json-loader!../json/donutDataFivePlusOther.json'),
+        jsonFivePlusOtherNoPercent = require('json-loader!../json/donutDataFivePlusOtherNoPercent.json'),
+        jsonOneZeroed = require('json-loader!../json/donutDataOneZeroed.json'),
+        jsonAllZeroed = require('json-loader!../json/donutDataAllZeroed.json'),
+        jsonThreeCategories = require('json-loader!../json/donutDataThreeCategories.json');
 
 
     function DonutDataBuilder(config) {
@@ -31,15 +33,15 @@ define(function(require) {
             return new this.Klass(attributes);
         };
 
-        /**
-         * Sets the path for fetching the data
-         * @param  {String} path Desired path for test data
-         * @return {DonutDataBuilder}      Builder object
-         */
-        this.withPath = function(path) {
-            var attributes = _.extend({}, this.config, {
-                jsonURL: path
-            });
+        this.withOneTopicAtZero = function() {
+            var attributes = _.extend({}, this.config, jsonOneZeroed);
+
+            return new this.Klass(attributes);
+        };
+
+
+        this.withAllTopicsAtZero = function() {
+            var attributes = _.extend({}, this.config, jsonAllZeroed);
 
             return new this.Klass(attributes);
         };

@@ -3,6 +3,7 @@ define(function(require) {
 
     const d3Dispatch = require('d3-dispatch');
     const d3Ease = require('d3-ease');
+    const d3Format = require('d3-format');
     const d3Interpolate = require('d3-interpolate');
     const d3Scale = require('d3-scale');
     const d3Shape = require('d3-shape');
@@ -13,6 +14,8 @@ define(function(require) {
     const textHelper = require('./helpers/text');
     const colorHelper = require('./helpers/colors');
     const {calculatePercent} = require('./helpers/common');
+    const {emptyDonutData} =require('./helpers/constants');
+    const {donut} = require('./helpers/loadingStates');
 
 
     /**
@@ -69,6 +72,7 @@ define(function(require) {
             },
             width = 300,
             height = 300,
+            loadingState = donut,
             ease = d3Ease.easeCubicInOut,
             arcTransitionDuration = 750,
             pieDrawingTransitionDuration = 1200,
@@ -86,16 +90,23 @@ define(function(require) {
             svg,
 
             isAnimated = false,
+            isEmpty = false,
 
             highlightedSliceId,
             highlightedSlice,
             hasFixedHighlightedSlice = false,
+
+            emptyDataConfig = {
+                emptySliceColor: '#EFF2F5',
+                showEmptySlice: false
+            },
 
             quantityLabel = 'quantity',
             nameLabel = 'name',
             percentageLabel = 'percentage',
 
             percentageFormat = '.1f',
+            numberFormat,
 
             // colors
             colorScale,
@@ -108,7 +119,9 @@ define(function(require) {
             reduceOuterRadius = d => {
                 d.outerRadius = externalRadius - radiusHoverOffset;
             },
-            sortComparator = (a, b) => b.quantity - a.quantity,
+
+            orderingFunction = (a, b) => b.quantity - a.quantity,
+
             sumValues = (data) => data.reduce((total, d) => d.quantity + total, 0),
 
             // extractors
@@ -116,7 +129,7 @@ define(function(require) {
             getSliceFill = ({data}) => colorScale(data.name),
 
             // events
-            dispatcher = d3Dispatch.dispatch('customMouseOver', 'customMouseOut', 'customMouseMove');
+            dispatcher = d3Dispatch.dispatch('customMouseOver', 'customMouseOut', 'customMouseMove', 'customClick');
 
         /**
          * This function creates the graph using the selection as container
@@ -141,6 +154,9 @@ define(function(require) {
                 if (highlightedSliceId) {
                     initHighlightSlice();
                 }
+                if (isEmpty && emptyDataConfig.showEmptySlice) {
+                    drawEmptySlice();
+                }
             });
         }
 
@@ -161,11 +177,14 @@ define(function(require) {
         function buildContainerGroups() {
             let container = svg
               .append('g')
-                .classed('container-group', true)
-                .attr('transform', `translate(${width / 2}, ${height / 2})`);
+                .classed('container-group', true);
 
-            container.append('g').classed('chart-group', true);
-            container.append('g').classed('legend-group', true);
+            container
+              .append('g')
+                .classed('chart-group', true);
+            container
+              .append('g')
+                .classed('legend-group', true);
         }
 
         /**
@@ -176,7 +195,7 @@ define(function(require) {
             layout = d3Shape.pie()
                 .padAngle(paddingAngle)
                 .value(getQuantity)
-                .sort(sortComparator);
+                .sort(orderingFunction);
         }
 
         /**
@@ -199,42 +218,56 @@ define(function(require) {
             if (!svg) {
                 svg = d3Selection.select(container)
                   .append('svg')
-                    .classed('britechart donut-chart', true)
-                    .data([data]);  //TO REVIEW
+                    .classed('britechart donut-chart', true);
 
                 buildContainerGroups();
             }
 
+            // Updates Container Group position
+            svg
+                .select('.container-group')
+                .attr('transform', `translate(${width / 2}, ${height / 2})`);
+
+            // Updates SVG size
             svg
                 .attr('width', width)
                 .attr('height', height);
         }
 
         /**
-         * Cleaning data adding the proper format
-         * @param  {DonutChartData} data Data
+         * Cleaning data casting the quantities, names and percentages to the proper type while keeping
+         * the rest of properties on the data. It also calculates the percentages if not present.
+         * @param  {DonutChartData} data    Data as passed to the container
+         * @return {DonutChartData}         Clean data with percentages
          * @private
          */
         function cleanData(data) {
+            let dataWithPercentages;
             let cleanData = data.reduce((acc, d) => {
                 // Skip data without quantity
-                if (!d[quantityLabel]) {
+                if (d[quantityLabel] === undefined || d[quantityLabel] === null) {
                     return acc;
                 }
 
                 d.quantity = +d[quantityLabel];
                 d.name = String(d[nameLabel]);
                 d.percentage = d[percentageLabel] || null;
-                acc.push(d);
 
-                return acc;
+                return [...acc, d];
             }, []);
+
             let totalQuantity = sumValues(cleanData);
-            let dataWithPercentages = cleanData.map((d) => {
+
+            if (totalQuantity === 0 && emptyDataConfig.showEmptySlice) {
+                isEmpty = true;
+            }
+
+            dataWithPercentages = cleanData.map((d) => {
                 d.percentage = String(d.percentage || calculatePercent(d[quantityLabel], totalQuantity, percentageFormat));
 
                 return d;
             });
+
 
             return dataWithPercentages;
         }
@@ -248,6 +281,37 @@ define(function(require) {
         }
 
         /**
+         * Draw an empty slice
+         * @private
+         */
+        function drawEmptySlice() {
+
+            if (slices) {
+                svg.selectAll('g.arc').remove();
+            }
+            slices = svg.select('.chart-group')
+                .selectAll('g.arc')
+                .data(layout(emptyDonutData));
+
+            let newSlices = slices.enter()
+                .append('g')
+                  .each(storeAngle)
+                  .each(reduceOuterRadius)
+                  .classed('arc', true)
+                  .append('path');
+
+            newSlices.merge(slices)
+                .attr('fill', emptyDataConfig.emptySliceColor)
+                .attr('d', shape)
+                .transition()
+                .ease(ease)
+                .duration(pieDrawingTransitionDuration)
+                .attrTween('d', tweenLoading);
+
+            slices.exit().remove();
+        }
+
+        /**
          * Draws the values on the donut slice inside the text element
          *
          * @param  {Object} obj Data object
@@ -255,8 +319,9 @@ define(function(require) {
          */
         function drawLegend(obj) {
             if (obj.data) {
+
                 svg.select('.donut-text')
-                    .text(() => `${obj.data.percentage}% ${ obj.data.name}`)
+                    .text(() => `${obj.data.percentage}% ${obj.data.name}`)
                     .attr('dy', '.2em')
                     .attr('text-anchor', 'middle');
 
@@ -269,63 +334,60 @@ define(function(require) {
          * @private
          */
         function drawSlices() {
-            if (!slices) {
-                slices = svg.select('.chart-group')
-                    .selectAll('g.arc')
-                    .data(layout(data));
-
-                let newSlices = slices.enter()
-                  .append('g')
-                    .each(storeAngle)
-                    .each(reduceOuterRadius)
-                    .classed('arc', true);
-
-                if (isAnimated) {
-                    newSlices.merge(slices)
-                      .append('path')
-                        .attr('fill', getSliceFill)
-                        .on('mouseover', function(d) {
-                            handleMouseOver(this, d, chartWidth, chartHeight);
-                        })
-                        .on('mousemove', function(d) {
-                            handleMouseMove(this, d, chartWidth, chartHeight);
-                        })
-                        .on('mouseout', function(d) {
-                            handleMouseOut(this, d, chartWidth, chartHeight);
-                        })
-                        .transition()
-                        .ease(ease)
-                        .duration(pieDrawingTransitionDuration)
-                        .attrTween('d', tweenLoading);
-                } else {
-                    newSlices.merge(slices)
-                      .append('path')
-                        .attr('fill', getSliceFill)
-                        .attr('d', shape)
-                        .on('mouseover', function(d) {
-                            handleMouseOver(this, d, chartWidth, chartHeight);
-                        })
-                        .on('mousemove', function(d) {
-                            handleMouseMove(this, d, chartWidth, chartHeight);
-                        })
-                        .on('mouseout', function(d) {
-                            handleMouseOut(this, d, chartWidth, chartHeight);
-                        })
-                }
-            } else {
-                slices = svg.select('.chart-group')
-                    .selectAll('path')
-                    .data(layout(data));
-
-                slices
-                    .attr('d', shape);
-
-                // Redraws the angles of the data
-                slices
-                    .transition()
-                    .duration(arcTransitionDuration)
-                    .attrTween('d', tweenArc);
+            // Not ideal, we need to figure out how to call exit for nested elements
+            if (slices) {
+                svg.selectAll('g.arc').remove();
             }
+
+            slices = svg.select('.chart-group')
+                .selectAll('g.arc')
+                .data(layout(data));
+
+            let newSlices = slices.enter()
+                .append('g')
+                  .each(storeAngle)
+                  .each(reduceOuterRadius)
+                  .classed('arc', true)
+                  .append('path');
+
+            if (isAnimated) {
+                newSlices.merge(slices)
+                    .attr('fill', getSliceFill)
+                    .on('mouseover', function(d) {
+                        handleMouseOver(this, d, chartWidth, chartHeight);
+                    })
+                    .on('mousemove', function(d) {
+                        handleMouseMove(this, d, chartWidth, chartHeight);
+                    })
+                    .on('mouseout', function(d) {
+                        handleMouseOut(this, d, chartWidth, chartHeight);
+                    })
+                    .on('click', function(d) {
+                        handleClick(this, d, chartWidth, chartHeight);
+                    })
+                    .transition()
+                    .ease(ease)
+                    .duration(pieDrawingTransitionDuration)
+                    .attrTween('d', tweenLoading);
+            } else {
+                newSlices.merge(slices)
+                    .attr('fill', getSliceFill)
+                    .attr('d', shape)
+                    .on('mouseover', function(d) {
+                        handleMouseOver(this, d, chartWidth, chartHeight);
+                    })
+                    .on('mousemove', function(d) {
+                        handleMouseMove(this, d, chartWidth, chartHeight);
+                    })
+                    .on('mouseout', function(d) {
+                        handleMouseOut(this, d, chartWidth, chartHeight);
+                    })
+                    .on('click', function(d) {
+                        handleClick(this, d, chartWidth, chartHeight);
+                    });
+            }
+
+            slices.exit().remove();
         }
 
         /**
@@ -345,14 +407,14 @@ define(function(require) {
          * @return {void}
          * @private
          */
-        function handleMouseOver(e, d, chartWidth, chartHeight) {
+        function handleMouseOver(el, d, chartWidth, chartHeight) {
             drawLegend(d);
-            dispatcher.call('customMouseOver', e, d, d3Selection.mouse(e), [chartWidth, chartHeight]);
+            dispatcher.call('customMouseOver', el, d, d3Selection.mouse(el), [chartWidth, chartHeight]);
 
-            if (highlightedSlice && e !== highlightedSlice) {
+            if (highlightedSlice && el !== highlightedSlice) {
                 tweenGrowth(highlightedSlice, externalRadius - radiusHoverOffset);
             }
-            tweenGrowth(e, externalRadius);
+            tweenGrowth(el, externalRadius);
         }
 
         /**
@@ -360,8 +422,8 @@ define(function(require) {
          * @return {void}
          * @private
          */
-        function handleMouseMove(e, d, chartWidth, chartHeight) {
-            dispatcher.call('customMouseMove', e, d, d3Selection.mouse(e), [chartWidth, chartHeight]);
+        function handleMouseMove(el, d, chartWidth, chartHeight) {
+            dispatcher.call('customMouseMove', el, d, d3Selection.mouse(el), [chartWidth, chartHeight]);
         }
 
         /**
@@ -369,18 +431,32 @@ define(function(require) {
          * @return {void}
          * @private
          */
-        function handleMouseOut(e, d, chartWidth, chartHeight) {
+        function handleMouseOut(el, d, chartWidth, chartHeight) {
+            cleanLegend();
+
+            // When there is a fixed highlighted slice,
+            // we will always highlight it and render legend
             if (highlightedSlice && hasFixedHighlightedSlice) {
                 drawLegend(highlightedSlice.__data__);
-            } else {
-                cleanLegend();
-            }
-            dispatcher.call('customMouseOut', e, d, d3Selection.mouse(e), [chartWidth, chartHeight]);
-
-            if (highlightedSlice && hasFixedHighlightedSlice && e !== highlightedSlice) {
                 tweenGrowth(highlightedSlice, externalRadius);
             }
-            tweenGrowth(e, externalRadius - radiusHoverOffset, pieHoverTransitionDuration);
+
+            // When the current slice is not the highlighted, or there isn't a fixed highlighted slice and it is the highlighted
+            // we will shrink the slice
+            if (el !== highlightedSlice || (!hasFixedHighlightedSlice && el === highlightedSlice) ) {
+                tweenGrowth(el, externalRadius - radiusHoverOffset, pieHoverTransitionDuration);
+            }
+
+            dispatcher.call('customMouseOut', el, d, d3Selection.mouse(el), [chartWidth, chartHeight]);
+        }
+
+        /**
+         * Handles a path click
+         * @return {void}
+         * @private
+         */
+        function handleClick(el, d, chartWidth, chartHeight) {
+            dispatcher.call('customClick', el, d, d3Selection.mouse(el), [chartWidth, chartHeight]);
         }
 
         /**
@@ -402,7 +478,7 @@ define(function(require) {
          */
         function initTooltip() {
             svg.select('.legend-group')
-                .append('text')
+              .append('text')
                 .attr('class', 'donut-text');
         }
 
@@ -477,10 +553,13 @@ define(function(require) {
             textHelper.wrapText.call(null, 0, fontSize, legendWidth, text.node());
         }
 
+
+        // API
+
         /**
          * Gets or Sets the colorSchema of the chart
-         * @param  {String[]} _x Desired colorSchema for the graph
-         * @return { colorSchema | module} Current colorSchema or Chart module to chain calls
+         * @param  {String[]} _x        Desired colorSchema for the graph
+         * @return { String | module}   Current colorSchema or Chart module to chain calls
          * @public
          */
         exports.colorSchema = function(_x) {
@@ -488,13 +567,42 @@ define(function(require) {
                 return colorSchema;
             }
             colorSchema = _x;
+
             return this;
         };
 
         /**
+         * Gets or Sets the emptyDataConfig of the chart. If set and data is empty (quantity
+         * adds up to zero or there are no entries), the chart will render an empty slice
+         * with a given color (light gray by default)
+         * @param  {Object} _x emptyDataConfig object to get/set
+         * @return { Object | module} Current config for when chart data is an empty array
+         * @public
+         * @example donutChart.emptyDataConfig({showEmptySlice: true, emptySliceColor: '#000000'})
+         */
+        exports.emptyDataConfig = function(_x) {
+            if (!arguments.length) {
+                return emptyDataConfig;
+            }
+            emptyDataConfig = _x;
+
+            return this;
+        };
+
+        /**
+         * Chart exported to png and a download action is fired
+         * @param {String} filename     File title for the resulting picture
+         * @param {String} title        Title to add at the top of the exported picture
+         * @public
+         */
+        exports.exportChart = function(filename, title) {
+            exportChart.call(exports, svg, filename, title);
+        };
+
+        /**
          * Gets or Sets the externalRadius of the chart
-         * @param  {Number} _x ExternalRadius number to get/set
-         * @return { (Number | Module) } Current externalRadius or Donut Chart module to chain calls
+         * @param  {Number} _x              ExternalRadius number to get/set
+         * @return { (Number | Module) }    Current externalRadius or Donut Chart module to chain calls
          * @public
          */
         exports.externalRadius = function(_x) {
@@ -502,6 +610,7 @@ define(function(require) {
                 return externalRadius;
             }
             externalRadius = _x;
+
             return this;
         };
 
@@ -509,8 +618,8 @@ define(function(require) {
          * Gets or Sets the hasFixedHighlightedSlice property of the chart, making it to
          * highlight the selected slice id set with `highlightSliceById` all the time.
          *
-         * @param  {Boolean} _x                         If we want to make the highlighted slice permanently highlighted
-         * @return { hasFixedHighlightedSlice | module} Current hasFixedHighlightedSlice flag or Chart module
+         * @param  {Boolean} _x         If we want to make the highlighted slice permanently highlighted
+         * @return { Boolean | module}  Current hasFixedHighlightedSlice flag or Chart module
          * @public
          */
         exports.hasFixedHighlightedSlice = function(_x) {
@@ -524,8 +633,8 @@ define(function(require) {
 
         /**
          * Gets or Sets the height of the chart
-         * @param  {Number} _x Desired width for the graph
-         * @return { (Number | Module) } Current height or Donut Chart module to chain calls
+         * @param  {Number} _x              Desired width for the graph
+         * @return { (Number | Module) }    Current height or Donut Chart module to chain calls
          * @public
          */
         exports.height = function(_x) {
@@ -533,6 +642,37 @@ define(function(require) {
                 return height;
             }
             height = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the id of the slice to highlight
+         * @param  {Number} _x              Slice id
+         * @return { (Number | Module) }    Current highlighted slice id or Donut Chart module to chain calls
+         * @public
+         */
+        exports.highlightSliceById = function(_x) {
+            if (!arguments.length) {
+                return highlightedSliceId;
+            }
+            highlightedSliceId = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the internalRadius of the chart
+         * @param  {Number} _x              InternalRadius number to get/set
+         * @return { (Number | Module) }    Current internalRadius or Donut Chart module to chain calls
+         * @public
+         */
+        exports.internalRadius = function(_x) {
+            if (!arguments.length) {
+                return internalRadius;
+            }
+            internalRadius = _x;
+
             return this;
         };
 
@@ -540,8 +680,8 @@ define(function(require) {
          * Gets or Sets the isAnimated property of the chart, making it to animate when render.
          * By default this is 'false'
          *
-         * @param  {Boolean} _x Desired animation flag
-         * @return { isAnimated | module} Current isAnimated flag or Chart module
+         * @param  {Boolean} _x             Desired animation flag
+         * @return { Boolean | module}      Current isAnimated flag or Chart module
          * @public
          */
         exports.isAnimated = function(_x) {
@@ -554,23 +694,24 @@ define(function(require) {
         };
 
         /**
-         * Gets or Sets the internalRadius of the chart
-         * @param  {Number} _x InternalRadius number to get/set
-         * @return { (Number | Module) } Current internalRadius or Donut Chart module to chain calls
+         * Gets or Sets the loading state of the chart
+         * @param  {string} markup Desired markup to show when null data
+         * @return { loadingState | module} Current loading state markup or Chart module to chain calls
          * @public
          */
-        exports.internalRadius = function(_x) {
+        exports.loadingState = function(_markup) {
             if (!arguments.length) {
-                return internalRadius;
+                return loadingState;
             }
-            internalRadius = _x;
+            loadingState = _markup;
+
             return this;
         };
 
         /**
          * Gets or Sets the margin of the chart
-         * @param  {Object} _x Margin object to get/set
-         * @return { (Number | Module) } Current margin or Donut Chart module to chain calls
+         * @param  {Object} _x              Margin object to get/set
+         * @return { (Object | Module) }    Current margin or Donut Chart module to chain calls
          * @public
          */
         exports.margin = function(_x) {
@@ -578,50 +719,30 @@ define(function(require) {
                 return margin;
             }
             margin = _x;
+
             return this;
         };
 
+
         /**
-         * Gets or Sets the width of the chart
-         * @param  {Number} _x Desired width for the graph
-         * @return { (Number | Module) } Current width or Donut Chart module to chain calls
+         * Gets or Sets the number format of the donut chart
+         * @param  {string} _x Desired number format for the donut chart
+         * @return {numberFormat | module} Current numberFormat or Chart module to chain calls
          * @public
          */
-        exports.width = function(_x) {
+        exports.numberFormat = function(_x) {
             if (!arguments.length) {
-                return width;
+                return numberFormat;
             }
-            width = _x;
+            numberFormat = _x;
+
             return this;
-        };
-
-        /**
-         * Chart exported to png and a download action is fired
-         * @public
-         */
-        exports.exportChart = function(filename, title) {
-            exportChart.call(exports, svg, filename, title);
-        };
-
-
-        /**
-         * Gets or Sets the id of the slice to highlight
-         * @param  {Number} _x Slice id
-         * @return { (Number | Module) } Current highlighted slice id or Donut Chart module to chain calls
-         * @public
-         */
-        exports.highlightSliceById = function(_x) {
-            if (!arguments.length) {
-                return highlightedSliceId;
-            }
-            highlightedSliceId = _x;
-            return this;
-        };
+        }
 
         /**
          * Exposes an 'on' method that acts as a bridge with the event dispatcher
          * We are going to expose this events:
-         * customMouseOver, customMouseMove and customMouseOut
+         * customMouseOver, customMouseMove, customMouseOut and customClick
          *
          * @return {module} Bar Chart
          * @public
@@ -630,6 +751,66 @@ define(function(require) {
             let value = dispatcher.on.apply(dispatcher, arguments);
 
             return value === dispatcher ? exports : value;
+        };
+
+        /**
+         * Changes the order of items given custom function
+         * @param  {Function} _x              A custom function that sets logic for ordering
+         * @return { (Function | Module) }    Void function with no return
+         * @public
+         */
+        exports.orderingFunction = function(_x) {
+            if (!arguments.length) {
+                return orderingFunction;
+            }
+            orderingFunction = _x;
+
+            return this;
+        };
+
+       /**
+         * Gets or Sets the percentage format for the percentage label
+         * @param  {String} _x              Format for the percentage label (e.g. '.1f')
+         * @return { (Number | Module) }    Current format or Donut Chart module to chain calls
+         * @public
+         */
+        exports.percentageFormat = function(_x) {
+            if (!arguments.length) {
+                return percentageFormat;
+            }
+            percentageFormat = _x;
+
+            return this;
+        };
+
+     /**
+         * Gets or Sets the radiusHoverOffset of the chart
+         * @param  {Number} _x              Desired offset for the hovered slice
+         * @return { (Number | Module) }    Current offset or Donut Chart module to chain calls
+         * @public
+         */
+        exports.radiusHoverOffset = function(_x) {
+            if (!arguments.length) {
+                return radiusHoverOffset;
+            }
+            radiusHoverOffset = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the width of the chart
+         * @param  {Number} _x              Desired width for the graph
+         * @return { (Number | Module) }    Current width or Donut Chart module to chain calls
+         * @public
+         */
+        exports.width = function(_x) {
+            if (!arguments.length) {
+                return width;
+            }
+            width = _x;
+
+            return this;
         };
 
         return exports;

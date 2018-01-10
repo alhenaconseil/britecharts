@@ -4,8 +4,8 @@
             <div class="col-md-8">
                 <article>
                     <h2>Line Chart with fixed Aspect Ratio</h2>
-                    <div class="britechart js-line-chart-container line-chart-container card--chart"></div>
-                    <div class="britechart js-line-brush-chart-container card--chart"></div>
+                    <div class="js-line-chart-container line-chart-container card--chart"></div>
+                    <div class="js-line-brush-chart-container card--chart"></div>
                     <p class="js-date-range date-range is-hidden">Selected from <span class="js-start-date"></span> to <span class="js-end-date"></span></p>
                 </article>
             </div>
@@ -52,6 +52,7 @@ container.datum(dataset).call(lineChart);
 lineChart
     .tooltipThreshold(600)
     .height(300)
+    .lineCurve('basis')
     .grid('vertical')
     .width(containerWidth);
 
@@ -68,7 +69,7 @@ container.datum(dataset).call(lineChart);
             <div class="col-md-8">
                 <article>
                     <h2>Line Chart with Fixed Height</h2>
-                    <div class="britechart js-fixed-line-chart-container card--chart"></div>
+                    <div class="js-fixed-line-chart-container card--chart"></div>
                     <p>In this case, we have set a <strong>fixed height</strong> on the chart, as we are currently doing on the Sales report:</p>
                 </article>
             </div>
@@ -85,6 +86,24 @@ container.datum(dataset).call(lineChart);
                 </code></pre>
                 <h4>Demo Code</h4>
                 <p>Read the whole code of this demo <a href="https://github.com/eventbrite/britecharts/blob/master/demos/demo-line.js">in github</a></p>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-8">
+                <article>
+                    <a name="loading-state"></a>
+                    <h2 class="tutorial__heading">Loading State</h2>
+                    <div class="js-loading-container"></div>
+                </article>
+            </div>
+            <div class="col-md-4 sidebar">
+                <h3>The code</h3>
+                <pre><code class="language-javascript">
+container.html(lineChart.loadingState())
+                </code></pre>
+
+                <h4>Demo Code</h4>
+                <p>Read the whole code of this demo <a href="https://github.com/eventbrite/britecharts/blob/master/demos/demo-bar.js">in github</a></p>
             </div>
         </div>
     </div>

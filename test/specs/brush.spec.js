@@ -95,6 +95,18 @@ define(['jquery', 'd3', 'brush', 'brushChartDataBuilder'], function($, d3, chart
                 expect(actual).toBe(expected);
             });
 
+            it('should provide loadingState getter and setter', () => {
+                let previous = brushChart.loadingState(),
+                    expected = 'test',
+                    actual;
+
+                brushChart.loadingState(expected);
+                actual = brushChart.loadingState();
+
+                expect(previous).not.toBe(actual);
+                expect(actual).toBe(expected);
+            });
+
             it('should provide margin getter and setter', function() {
                 var previous = brushChart.margin(),
                     expected = {top: 4, right: 4, bottom: 4, left: 4},
@@ -150,6 +162,18 @@ define(['jquery', 'd3', 'brush', 'brushChartDataBuilder'], function($, d3, chart
 
                 brushChart.xTicks(expected);
                 actual = brushChart.xTicks();
+
+                expect(previous).not.toBe(expected);
+                expect(actual).toBe(expected);
+            });
+
+            it('should provide locale getter and setter', () => {
+                let previous = brushChart.locale(),
+                    expected = 'en-US',
+                    actual;
+
+                brushChart.locale(expected);
+                actual = brushChart.locale();
 
                 expect(previous).not.toBe(expected);
                 expect(actual).toBe(expected);

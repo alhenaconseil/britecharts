@@ -18,6 +18,9 @@ define(function(require) {
 
     const {axisTimeCombinations} = require('./helpers/constants');
 
+    const {uniqueId} = require('./helpers/common');
+    const {line} = require('./helpers/loadingStates');
+
 
     /**
      * @typedef BrushChartData
@@ -69,6 +72,7 @@ define(function(require) {
             },
             width = 960,
             height = 500,
+            loadingState = line,
             data,
             svg,
 
@@ -86,6 +90,7 @@ define(function(require) {
             xAxisFormat = null,
             xTicks = null,
             xAxisCustomFormat = null,
+            locale,
 
             brush,
             chartBrush,
@@ -94,6 +99,7 @@ define(function(require) {
             tickPadding = 5,
 
             gradient = colorHelper.colorGradients.greenBlue,
+            gradientId = uniqueId('brush-area-gradient'),
 
             // Dispatcher object to broadcast the mouse events
             // Ref: https://github.com/mbostock/d3/wiki/Internals#d3_dispatch
@@ -195,7 +201,7 @@ define(function(require) {
             let metadataGroup = svg.select('.metadata-group');
 
             metadataGroup.append('linearGradient')
-                .attr('id', 'brush-area-gradient')
+                .attr('id', gradientId)
                 .attr('gradientUnits', 'userSpaceOnUse')
                 .attr('x1', 0)
                 .attr('x2', xScale(data[data.length - 1].date))
@@ -245,17 +251,19 @@ define(function(require) {
         }
 
         /**
-         * Cleaning data adding the proper format
-         *
-         * @param  {BrushChartData} data Data
+         * Cleaning data casting the values and dates to the proper type while keeping
+         * the rest of properties on the data
+         * @param  {BrushChartData} originalData        Raw data from the container
+         * @return {BrushChartData}                     Clean data
+         * @private
          */
-        function cleanData(data) {
-            return data.map(function (d) {
+        function cleanData(originalData) {
+            return originalData.reduce((acc, d) => {
                 d.date = new Date(d[dateLabel]);
                 d.value = +d[valueLabel];
 
-                return d;
-            });
+                return [...acc, d];
+            }, []);
         }
 
         /**
@@ -313,6 +321,9 @@ define(function(require) {
             chartBrush.selectAll('rect')
                 .classed('brush-rect', true)
                 .attr('height', chartHeight);
+
+            chartBrush.selectAll('.selection')
+                .attr('fill', `url(#${gradientId})`);
         }
 
         /**
@@ -469,6 +480,37 @@ define(function(require) {
                 return height;
             }
             height = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the loading state of the chart
+         * @param  {string} markup Desired markup to show when null data
+         * @return { loadingState | module} Current loading state markup or Chart module to chain calls
+         * @public
+         */
+        exports.loadingState = function(_markup) {
+            if (!arguments.length) {
+                return loadingState;
+            }
+            loadingState = _markup;
+
+            return this;
+        };
+
+        /**
+         * Pass language tag for the tooltip to localize the date.
+         * Feature uses Intl.DateTimeFormat, for compatability and support, refer to
+         * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DateTimeFormat
+         * @param  {String} _x  must be a language tag (BCP 47) like 'en-US' or 'fr-FR'
+         * @return { (String|Module) }    Current locale or module to chain calls
+         */
+        exports.locale = function(_x) {
+            if (!arguments.length) {
+                return locale;
+            }
+            locale = _x;
 
             return this;
         };

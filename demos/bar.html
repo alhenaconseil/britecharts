@@ -3,7 +3,7 @@
             <div class="
 col-md-6">
                 <article>
-                    <h2 class="tutorial__heading">Bar Chart with Tooltip</h2>
+                    <h2 class="tutorial__heading">Bar Chart with Tooltip and Labels</h2>
                     <div class="js-bar-chart-tooltip-container bar-chart-tooltip-container card--chart"></div>
                 </article>
             </div>
@@ -14,12 +14,17 @@ barChart
     .width(containerWidth)
     .height(300)
     .hasPercentage(true)
+    .enableLabels(true)
+    .labelsNumberFormat('.0%')
     .isAnimated(true)
     .on('customMouseOver', tooltip.show)
     .on('customMouseMove', tooltip.update)
     .on('customMouseOut', tooltip.hide);
 
 barContainer.datum(dataset).call(barChart);
+
+tooltip
+    .numberFormat('.2%');
 
 tooltipContainer = d3.select('.bar-chart .metadata-group');
 tooltipContainer.datum([]).call(tooltip);
@@ -69,7 +74,7 @@ barContainer.datum(dataset).call(barChart);
         <div class="row">
             <div class="col-md-6">
                 <article>
-                    <h2 class="tutorial__heading">Simple Bar Chart</h2>
+                    <h2 class="tutorial__heading">Simple Bar Chart with labels</h2>
                     <div class="js-bar-chart-container card--chart"></div>
                 </article>
             </div>
@@ -78,9 +83,30 @@ barContainer.datum(dataset).call(barChart);
                 <pre><code class="language-javascript">
 barChart
     .width(containerWidth)
+    .hasPercentage(true)
+    .enableLabels(true)
+    .labelsNumberFormat('.0%')
     .height(300);
 
 barContainer.datum(dataset).call(barChart);
+                </code></pre>
+
+                <h4>Demo Code</h4>
+                <p>Read the whole code of this demo <a href="https://github.com/eventbrite/britecharts/blob/master/demos/demo-bar.js">in github</a></p>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6">
+                <article>
+                    <a name="loading-state"></a>
+                    <h2 class="tutorial__heading">Loading State</h2>
+                    <div class="js-loading-container"></div>
+                </article>
+            </div>
+            <div class="col-md-6 sidebar">
+                <h3>The code</h3>
+                <pre><code class="language-javascript">
+barContainer.html(barChart.loadingState())
                 </code></pre>
 
                 <h4>Demo Code</h4>

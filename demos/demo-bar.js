@@ -8,20 +8,24 @@ const miniTooltip = require('./../src/charts/mini-tooltip');
 const colors = require('./../src/charts/helpers/colors');
 const dataBuilder = require('./../test/fixtures/barChartDataBuilder');
 
-    require('./helpers/resizeHelper');
+const aTestDataSet = () => new dataBuilder.BarDataBuilder();
+
+require('./helpers/resizeHelper');
 
 function createSimpleBarChart() {
     let barChart = bar(),
-        testDataSet = new dataBuilder.BarDataBuilder(),
         barContainer = d3Selection.select('.js-bar-chart-container'),
         containerWidth = barContainer.node() ? barContainer.node().getBoundingClientRect().width : false,
         dataset;
 
     if (containerWidth) {
-        dataset = testDataSet.withLettersFrequency().build();
+        dataset = aTestDataSet().withLettersFrequency().build();
 
         barChart
             .width(containerWidth)
+            .hasPercentage(true)
+            .enableLabels(true)
+            .labelsNumberFormat('.0%')
             .height(300);
 
         barContainer.datum(dataset).call(barChart);
@@ -31,14 +35,13 @@ function createSimpleBarChart() {
 function createHorizontalBarChart() {
     let barChart = bar(),
         tooltip = miniTooltip(),
-        testDataSet = new dataBuilder.BarDataBuilder(),
         barContainer = d3Selection.select('.js-horizontal-bar-chart-container'),
         containerWidth = barContainer.node() ? barContainer.node().getBoundingClientRect().width : false,
         tooltipContainer,
         dataset;
 
     if (containerWidth) {
-        dataset = testDataSet.withColors().build();
+        dataset = aTestDataSet().withColors().build();
 
         barChart
             .isHorizontal(true)
@@ -68,7 +71,6 @@ function createHorizontalBarChart() {
 function createBarChartWithTooltip() {
     let barChart = bar(),
         tooltip = miniTooltip(),
-        testDataSet = new dataBuilder.BarDataBuilder(),
         barContainer = d3Selection.select('.js-bar-chart-tooltip-container'),
         containerWidth = barContainer.node() ? barContainer.node().getBoundingClientRect().width : false,
         tooltipContainer,
@@ -79,21 +81,34 @@ function createBarChartWithTooltip() {
             barChart.exportChart('barchart.png', 'Britecharts Bar Chart');
         });
 
-        dataset = testDataSet.withLettersFrequency().build();
+        dataset = aTestDataSet().withLettersFrequency().build();
 
         barChart
             .width(containerWidth)
             .height(300)
             .isAnimated(true)
-            .hasPercentage(true)
             .on('customMouseOver', tooltip.show)
             .on('customMouseMove', tooltip.update)
             .on('customMouseOut', tooltip.hide);
 
         barContainer.datum(dataset).call(barChart);
 
+        tooltip
+            .numberFormat('.2%')
+
         tooltipContainer = d3Selection.select('.bar-chart .metadata-group');
         tooltipContainer.datum([]).call(tooltip);
+    }
+}
+
+function createLoadingState() {
+    let barChart = bar(),
+        barContainer = d3Selection.select('.js-loading-container'),
+        containerWidth = barContainer.node() ? barContainer.node().getBoundingClientRect().width : false,
+        dataset = null;
+
+    if (containerWidth) {
+        barContainer.html(barChart.loadingState());
     }
 }
 
@@ -102,13 +117,14 @@ if (d3Selection.select('.js-bar-chart-tooltip-container').node()){
     createBarChartWithTooltip();
     createHorizontalBarChart();
     createSimpleBarChart();
+    createLoadingState();
 
     let redrawCharts = function(){
         d3Selection.selectAll('.bar-chart').remove();
-
         createBarChartWithTooltip();
         createHorizontalBarChart();
         createSimpleBarChart();
+        createLoadingState();
     };
 
     // Redraw charts on window resize

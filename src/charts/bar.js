@@ -14,7 +14,7 @@ define(function(require) {
     const textHelper = require('./helpers/text');
     const {exportChart} = require('./helpers/exportChart');
     const colorHelper = require('./helpers/colors');
-
+    const {bar} = require('./helpers/loadingStates');
 
     const PERCENTAGE_FORMAT = '%';
     const NUMBER_FORMAT = ',f';
@@ -69,6 +69,7 @@ define(function(require) {
             },
             width = 960,
             height = 500,
+            loadingState = bar,
             data,
             dataZeroed,
             chartWidth, chartHeight,
@@ -79,12 +80,12 @@ define(function(require) {
             yTicks = 5,
             xTicks = 5,
             percentageAxisToMaxRatio = 1,
-            enablePercentageLabels = false,
-            percentageLabelMargin = 7,
-            percentageLabelSize = 12,
-            horizontalLabelFormat = '.0%',
-            verticalLabelFormat = '.0f',
-            valueLabelFormat = NUMBER_FORMAT,
+            numberFormat = NUMBER_FORMAT,
+            enableLabels = false,
+            labelsMargin = 7,
+            labelsNumberFormat = NUMBER_FORMAT,
+            labelsSize = 12,
+            betweenBarsPadding = 0.1,
             xAxis, yAxis,
             xAxisPadding = {
                 top: 0,
@@ -103,6 +104,8 @@ define(function(require) {
             animationStepRatio = 70,
             interBarDelay = (d, i) => animationStepRatio * i,
 
+            orderingFunction,
+
             valueLabel = 'value',
             nameLabel = 'name',
 
@@ -112,20 +115,24 @@ define(function(require) {
 
             // Dispatcher object to broadcast the mouse events
             // Ref: https://github.com/mbostock/d3/wiki/Internals#d3_dispatch
-            dispatcher = d3Dispatch.dispatch('customMouseOver', 'customMouseOut', 'customMouseMove'),
+            dispatcher = d3Dispatch.dispatch(
+                'customMouseOver',
+                'customMouseOut',
+                'customMouseMove',
+                'customClick'
+            ),
 
             // extractors
             getName = ({name}) => name,
             getValue = ({value}) => value,
 
-            _percentageLabelHorizontalX = ({value}) => xScale(value) + percentageLabelMargin,
-            _percentageLabelHorizontalY= ({name}) => yScale(name) + (yScale.bandwidth() / 2) + (percentageLabelSize * (3/8)),
+            _labelsFormatValue = ({value}) => d3Format.format(labelsNumberFormat)(value),
 
-            _percentageLabelVerticalX = ({name}) => xScale(name),
-            _percentageLabelVerticalY = ({value}) => yScale(value) - percentageLabelMargin,
+            _labelsHorizontalX = ({value}) => xScale(value) + labelsMargin,
+            _labelsHorizontalY= ({name}) => yScale(name) + (yScale.bandwidth() / 2) + (labelsSize * (3/8)),
 
-            _percentageLabelHorizontalFormatValue = ({value}) => d3Format.format(horizontalLabelFormat)(value),
-            _percentageLabelVerticalFormatValue = ({value}) => d3Format.format(verticalLabelFormat)(parseFloat(value) * 100);
+            _labelsVerticalX = ({name}) => xScale(name),
+            _labelsVerticalY = ({value}) => yScale(value) - labelsMargin;
 
         /**
          * This function creates the graph using the selection as container
@@ -137,7 +144,7 @@ define(function(require) {
             _selection.each(function(_data) {
                 chartWidth = width - margin.left - margin.right - (yAxisPaddingBetweenChart * 1.2);
                 chartHeight = height - margin.top - margin.bottom;
-                ({data, dataZeroed} = cleanData(_data));
+                ({data, dataZeroed} = sortData(cleanData(_data)));
 
                 buildScales();
                 buildAxis();
@@ -145,8 +152,8 @@ define(function(require) {
                 drawGridLines();
                 drawBars();
                 drawAxis();
-                if (enablePercentageLabels) {
-                    drawPercentageLabels();
+                if (enableLabels) {
+                    drawLabels();
                 }
             });
         }
@@ -158,7 +165,7 @@ define(function(require) {
         function buildAxis() {
             if (isHorizontal) {
                 xAxis = d3Axis.axisBottom(xScale)
-                    .ticks(xTicks, valueLabelFormat)
+                    .ticks(xTicks, numberFormat)
                     .tickSizeInner([-chartHeight]);
 
                 yAxis = d3Axis.axisLeft(yScale);
@@ -166,7 +173,7 @@ define(function(require) {
                 xAxis = d3Axis.axisBottom(xScale);
 
                 yAxis = d3Axis.axisLeft(yScale)
-                    .ticks(yTicks, valueLabelFormat)
+                    .ticks(yTicks, numberFormat)
             }
         }
 
@@ -210,12 +217,12 @@ define(function(require) {
                 yScale = d3Scale.scaleBand()
                     .domain(data.map(getName))
                     .rangeRound([chartHeight, 0])
-                    .padding(0.1);
+                    .padding(betweenBarsPadding);
             } else {
                 xScale = d3Scale.scaleBand()
                     .domain(data.map(getName))
                     .rangeRound([0, chartWidth])
-                    .padding(0.1);
+                    .padding(betweenBarsPadding);
 
                 yScale = d3Scale.scaleLinear()
                     .domain([0, percentageAxis])
@@ -260,21 +267,44 @@ define(function(require) {
         }
 
         /**
-         * Cleaning data adding the proper format
-         * @param  {BarChartData} originalData Data
+         * Cleaning data casting the values and names to the proper type while keeping
+         * the rest of properties on the data
+         * It also creates a set of zeroed data (for animation purposes)
+         * @param  {BarChartData} originalData  Raw data as passed to the container
+         * @return  {BarChartData}              Clean data
          * @private
          */
         function cleanData(originalData) {
-            let data = originalData.map((d) => ({
-                    value: +d[valueLabel],
-                    name: String(d[nameLabel])
-                }));
-            let dataZeroed = data.map((d) => ({
-                    value: 0,
-                    name: String(d[nameLabel])
-                }));
+            let data = originalData.reduce((acc, d) => {
+                d.value = +d[valueLabel];
+                d.name = String(d[nameLabel]);
 
-            return {data, dataZeroed}
+                return [...acc, d];
+            }, []);
+
+            let dataZeroed = data.map((d) => ({
+                value: 0,
+                name: String(d[nameLabel])
+            }));
+
+            return { data, dataZeroed };
+        }
+
+        /**
+         * Sorts data if orderingFunction is specified
+         * @param  {BarChartData}     clean unordered data
+         * @return  {BarChartData}    clean ordered data
+         * @private
+         */
+        function sortData(unorderedData) {
+            let {data, dataZeroed} = unorderedData;
+
+            if (orderingFunction) {
+                data.sort(orderingFunction);
+                dataZeroed.sort(orderingFunction)
+            }
+
+            return { data, dataZeroed };
         }
 
         /**
@@ -327,6 +357,9 @@ define(function(require) {
                 .on('mouseout', function(d) {
                     handleMouseOut(this, d, chartWidth, chartHeight);
                 })
+                .on('click', function(d) {
+                    handleClick(this, d, chartWidth, chartHeight);
+                })
               .merge(bars)
                 .attr('x', 0)
                 .attr('y', ({name}) => yScale(name))
@@ -357,6 +390,9 @@ define(function(require) {
                 })
                 .on('mouseout', function(d) {
                     handleMouseOut(this, d, chartWidth, chartHeight);
+                })
+                .on('click', function(d) {
+                    handleClick(this, d, chartWidth, chartHeight);
                 });
 
             bars
@@ -394,6 +430,9 @@ define(function(require) {
                 .on('mouseout', function(d) {
                     handleMouseOut(this, d, chartWidth, chartHeight);
                 })
+                .on('click', function(d) {
+                    handleClick(this, d, chartWidth, chartHeight);
+                })
               .merge(bars)
                 .attr('x', ({name}) => xScale(name))
                 .attr('width', xScale.bandwidth())
@@ -429,6 +468,9 @@ define(function(require) {
                 .on('mouseout', function(d) {
                     handleMouseOut(this, d, chartWidth, chartHeight);
                 })
+                .on('click', function(d) {
+                    handleClick(this, d, chartWidth, chartHeight);
+                })
               .merge(bars)
                 .attr('x', ({name}) => xScale(name))
                 .attr('y', ({value}) => yScale(value))
@@ -438,16 +480,16 @@ define(function(require) {
         }
 
         /**
-         * Draws percentage labels at the end of each bar
+         * Draws labels at the end of each bar
          * @private
          * @return {void}
          */
-        function drawPercentageLabels() {
-            let labelXPosition = isHorizontal ? _percentageLabelHorizontalX : _percentageLabelVerticalX;
-            let labelYPosition = isHorizontal ? _percentageLabelHorizontalY : _percentageLabelVerticalY;
-            let text = isHorizontal ? _percentageLabelHorizontalFormatValue : _percentageLabelVerticalFormatValue;
+        function drawLabels() {
+            let labelXPosition = isHorizontal ? _labelsHorizontalX : _labelsVerticalX;
+            let labelYPosition = isHorizontal ? _labelsHorizontalY : _labelsVerticalY;
+            let text = _labelsFormatValue
 
-            let percentageLabels = svg.select('.metadata-group')
+            let labels = svg.select('.metadata-group')
               .append('g')
                 .classed('percentage-label-group', true)
                 .selectAll('text')
@@ -455,12 +497,12 @@ define(function(require) {
                 .enter()
               .append('text');
 
-            percentageLabels
+            labels
                 .classed('percentage-label', true)
                 .attr('x', labelXPosition)
                 .attr('y', labelYPosition)
                 .text(text)
-                .attr('font-size', percentageLabelSize + 'px')
+                .attr('font-size', labelsSize + 'px')
         }
 
         /**
@@ -619,7 +661,31 @@ define(function(require) {
             d3Selection.select(e).attr('fill', ({name}) => colorMap(name));
         }
 
+        /**
+         * Custom onClick event handler
+         * @return {void}
+         * @private
+         */
+        function handleClick(e, d, chartWidth, chartHeight) {
+            dispatcher.call('customClick', e, d, d3Selection.mouse(e), [chartWidth, chartHeight]);
+        }
+
         // API
+
+        /**
+         * Gets or Sets the padding of the chart (Default is 0.1)
+         * @param  { Number | module } _x Padding value to get/set
+         * @return { padding | module} Current padding or Chart module to chain calls
+         * @public
+         */
+        exports.betweenBarsPadding = function(_x) {
+            if (!arguments.length) {
+                return betweenBarsPadding;
+            }
+            betweenBarsPadding = _x;
+
+            return this;
+        };
 
         /**
          * Gets or Sets the colorSchema of the chart
@@ -637,21 +703,23 @@ define(function(require) {
         };
 
         /**
-         * Default false. If true, adds percentage labels at the end of the bars
-         * @param  {Boolean} _x
-         * @return {Boolean | module}    Current value of enablePercentageLables or Chart module to chain calls
+         * If true, adds labels at the end of the bars
+         * @param  {Boolean} [_x=false]
+         * @return {Boolean | module}    Current value of enableLabels or Chart module to chain calls
          */
-        exports.enablePercentageLabels = function(_x) {
+        exports.enableLabels = function(_x) {
             if (!arguments.length) {
-                return enablePercentageLabels;
+                return enableLabels;
             }
-            enablePercentageLabels = _x;
+            enableLabels = _x;
 
             return this;
         };
 
         /**
          * Chart exported to png and a download action is fired
+         * @param {String} filename     File title for the resulting picture
+         * @param {String} title        Title to add at the top of the exported picture
          * @public
          */
         exports.exportChart = function(filename, title) {
@@ -669,22 +737,6 @@ define(function(require) {
                 return height;
             }
             height = _x;
-
-            return this;
-        };
-
-        /**
-         * Gets or Sets the horizontal direction of the chart
-         * @param  {number} _x Desired horizontal direction for the chart
-         * @return { isHorizontal | module} If it is horizontal or module to chain calls
-         * @deprecated
-         */
-        exports.horizontal = function (_x) {
-            if (!arguments.length) {
-                return isHorizontal;
-            }
-            isHorizontal = _x;
-            console.log('We are deprecating the .horizontal() accessor, use .isHorizontal() instead');
 
             return this;
         };
@@ -722,6 +774,109 @@ define(function(require) {
         };
 
         /**
+         * Offset between end of bar and start of the percentage bars
+         * @param  {number} [_x=7] margin offset from end of bar
+         * @return {number | module}    Current offset or Chart module to chain calls
+         */
+        exports.labelsMargin = function(_x) {
+            if (!arguments.length) {
+                return labelsMargin;
+            }
+            labelsMargin = _x;
+
+            return this;
+        }
+
+        /**
+         * Gets or Sets the labels number format
+         * @param  {string} [_x=",f"] desired label number format for the bar chart
+         * @return {string | module} Current labelsNumberFormat or Chart module to chain calls
+         * @public
+         */
+        exports.labelsNumberFormat = function(_x) {
+            if (!arguments.length) {
+                return labelsNumberFormat;
+            }
+            labelsNumberFormat = _x;
+
+            return this;
+        }
+
+        /**
+         * Get or Sets the labels text size
+         * @param  {number} [_x=12] label font size
+         * @return {number | module}    Current text size or Chart module to chain calls
+         */
+        exports.labelsSize = function(_x) {
+            if (!arguments.length) {
+                return labelsSize;
+            }
+            labelsSize = _x;
+
+            return this;
+        }
+
+        /**
+         * Gets or Sets the loading state of the chart
+         * @param  {string} markup Desired markup to show when null data
+         * @return { loadingState | module} Current loading state markup or Chart module to chain calls
+         * @public
+         */
+        exports.loadingState = function(_markup) {
+            if (!arguments.length) {
+                return loadingState;
+            }
+            loadingState = _markup;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the margin of the chart
+         * @param  {object} _x Margin object to get/set
+         * @return { margin | module} Current margin or Chart module to chain calls
+         * @public
+         */
+        exports.horizontal = function (_x) {
+            if (!arguments.length) {
+                return isHorizontal;
+            }
+            margin = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the nameLabel of the chart
+         * @param  {Number} _x Desired nameLabel for the graph
+         * @return { nameLabel | module} Current nameLabel or Chart module to chain calls
+         * @public
+         */
+        exports.nameLabel = function(_x) {
+            if (!arguments.length) {
+                return nameLabel;
+            }
+            nameLabel = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the number format of the bar chart
+         * @param  {string} _x Desired number format for the bar chart
+         * @return {numberFormat | module} Current numberFormat or Chart module to chain calls
+         * @public
+         */
+        exports.numberFormat = function(_x) {
+            if (!arguments.length) {
+                return numberFormat;
+            }
+            numberFormat = _x;
+
+            return this;
+        }
+
+        /**
          * Gets or Sets the margin of the chart
          * @param  {object} _x Margin object to get/set
          * @return { margin | module} Current margin or Chart module to chain calls
@@ -754,7 +909,7 @@ define(function(require) {
         /**
          * Exposes an 'on' method that acts as a bridge with the event dispatcher
          * We are going to expose this events:
-         * customMouseOver, customMouseMove and customMouseOut
+         * customMouseOver, customMouseMove, customMouseOut, and customClick
          *
          * @return {module} Bar Chart
          * @public
@@ -782,20 +937,6 @@ define(function(require) {
         }
 
         /**
-         * Default 10px. Offset between end of bar and start of the percentage bars
-         * @param  {number} _x percentage margin offset from end of bar
-         * @return {number | module}    Currnet offset or Chart module to chain calls
-         */
-        exports.percentageLabelMargin = function(_x) {
-            if (!arguments.length) {
-                return percentageLabelMargin;
-            }
-            percentageLabelMargin = _x;
-
-            return this;
-        }
-
-        /**
          * Gets or Sets whether the color list should be reversed or not
          * @param  {boolean} _x     Should reverse the color list
          * @return { boolean | module} Is color list being reversed
@@ -810,21 +951,21 @@ define(function(require) {
             return this;
         };
 
+
         /**
-         * Gets or Sets whether the color list should be reversed or not
-         * @param  {boolean} _x     Should reverse the color list
-         * @return { boolean | module} Is color list being reversed
-         * @deprecated
+         * Changes the order of items given the custom function
+         * @param  {Function} _x             A custom function that sets logic for ordering
+         * @return { (Function | Module) }   Updated module with ordering function applied
+         * @public
          */
-        exports.reverseColorList = function(_x) {
+        exports.orderingFunction = function(_x) {
             if (!arguments.length) {
-                return shouldReverseColorList;
+                return orderingFunction;
             }
-            shouldReverseColorList = _x;
-            console.log('We are deprecating the .reverseColorList() accessor, use .shouldReverseColorList() instead');
+            orderingFunction = _x;
 
             return this;
-        };
+        }
 
         /**
          * Gets or Sets the hasPercentage status
@@ -834,31 +975,12 @@ define(function(require) {
          */
         exports.hasPercentage = function(_x) {
             if (!arguments.length) {
-                return valueLabelFormat === PERCENTAGE_FORMAT;
+                return numberFormat === PERCENTAGE_FORMAT;
             }
             if (_x) {
-                valueLabelFormat = PERCENTAGE_FORMAT;
+                numberFormat = PERCENTAGE_FORMAT;
             } else {
-                valueLabelFormat = NUMBER_FORMAT;
-            }
-
-            return this;
-        };
-
-        /**
-         * Gets or Sets the valueLabelFormat to a percentage format if true (default false)
-         * @param  {boolean} _x     Should use percentage as value format
-         * @return { boolean | module} Is percentage the value format used or Chart module to chain calls
-         * @public
-         */
-        exports.usePercentage = function(_x) {
-            if (!arguments.length) {
-                return valueLabelFormat === PERCENTAGE_FORMAT;
-            }
-            if (_x) {
-                valueLabelFormat = PERCENTAGE_FORMAT;
-            } else {
-                valueLabelFormat = NUMBER_FORMAT;
+                numberFormat = NUMBER_FORMAT;
             }
 
             return this;

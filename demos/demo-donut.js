@@ -1,26 +1,30 @@
 'use strict';
 
-var d3Selection = require('d3-selection'),
-    PubSub = require('pubsub-js'),
+const d3Selection = require('d3-selection');
+const PubSub = require('pubsub-js');
 
-    donut = require('./../src/charts/donut'),
-    legend = require('./../src/charts/legend'),
+const donut = require('./../src/charts/donut');
+const legend = require('./../src/charts/legend');
 
-    dataBuilder = require('./../test/fixtures/donutChartDataBuilder'),
-    colorSelectorHelper = require('./helpers/colorSelector'),
+const dataBuilder = require('./../test/fixtures/donutChartDataBuilder');
+const colorSelectorHelper = require('./helpers/colorSelector');
 
-    dataset = new dataBuilder.DonutDataBuilder()
+const dataset = new dataBuilder.DonutDataBuilder()
         .withFivePlusOther()
-        .build(),
-    datasetNoPercentages = new dataBuilder.DonutDataBuilder()
+        .build();
+const datasetNoPercentages = new dataBuilder.DonutDataBuilder()
         .withFivePlusOtherNoPercent()
-        .build(),
-    legendChart;
-    require('./helpers/resizeHelper');
+        .build();
+const datasetWithThreeItems = new dataBuilder.DonutDataBuilder()
+        .withThreeCategories()
+        .build();
+let legendChart;
+let redrawCharts;
 
+require('./helpers/resizeHelper');
 
-function createDonutChart(dataset, optionalColorSchema) {
-    var legendChart = getLegendChart(dataset, optionalColorSchema),
+function createDonutChart(optionalColorSchema) {
+    let legendChart = getLegendChart(dataset, optionalColorSchema),
         donutChart = donut(),
         donutContainer = d3Selection.select('.js-donut-chart-container'),
         containerWidth = donutContainer.node() ? donutContainer.node().getBoundingClientRect().width : false;
@@ -57,7 +61,7 @@ function createDonutChart(dataset, optionalColorSchema) {
 }
 
 function getLegendChart(dataset, optionalColorSchema) {
-    var legendChart = legend(),
+    let legendChart = legend(),
         legendContainer = d3Selection.select('.js-legend-chart-container'),
         containerWidth = legendContainer.node() ? legendContainer.node().getBoundingClientRect().width : false;
 
@@ -80,7 +84,7 @@ function getLegendChart(dataset, optionalColorSchema) {
 }
 
 function getInlineLegendChart(dataset, optionalColorSchema) {
-    var legendChart = legend(),
+    let legendChart = legend(),
         legendContainer = d3Selection.select('.js-inline-legend-chart-container'),
         containerWidth = legendContainer.node() ? legendContainer.node().getBoundingClientRect().width : false;
 
@@ -104,16 +108,37 @@ function getInlineLegendChart(dataset, optionalColorSchema) {
 }
 
 function createSmallDonutChart() {
-    var donutChart = donut(),
+    let donutChart = donut(),
         donutContainer = d3Selection.select('.js-small-donut-chart-container'),
         containerWidth = donutContainer.node() ? donutContainer.node().getBoundingClientRect().width : false,
-        dataset = new dataBuilder.DonutDataBuilder()
-            .withThreeCategories()
-            .build(),
-        legendChart = getInlineLegendChart(dataset);
+        legendChart = getInlineLegendChart(datasetWithThreeItems);
 
     if (containerWidth) {
         donutChart
+            .width(containerWidth)
+            .height(containerWidth/1.8)
+            .externalRadius(containerWidth/5)
+            .internalRadius(containerWidth/10)
+            .on('customMouseOver', function(data) {
+                legendChart.highlight(data.data.id);
+            })
+            .on('customMouseOut', function() {
+                legendChart.clearHighlight();
+            });
+
+        donutContainer.datum(datasetWithThreeItems).call(donutChart);
+    }
+}
+
+function createDonutWithHighlightSliceChart() {
+    let donutChart = donut(),
+        donutContainer = d3Selection.select('.js-donut-highlight-slice-chart-container'),
+        containerWidth = donutContainer.node() ? donutContainer.node().getBoundingClientRect().width : false;
+
+    if (containerWidth) {
+        donutChart
+            .highlightSliceById(11)
+            .hasFixedHighlightedSlice(true)
             .width(containerWidth)
             .height(containerWidth/1.8)
             .externalRadius(containerWidth/5)
@@ -146,27 +171,40 @@ function createDonutWithHighlightSliceChart() {
             .externalRadius(containerWidth/5)
             .internalRadius(containerWidth/10);
 
-        donutContainer.datum(dataset).call(donutChart);
+        donutContainer.datum(datasetWithThreeItems).call(donutChart);
+    }
+}
+
+function createLoadingState() {
+    let donutChart = donut(),
+        donutContainer = d3Selection.select('.js-loading-container'),
+        containerWidth = donutContainer.node() ? donutContainer.node().getBoundingClientRect().width : false,
+        dataset = null;
+
+    if (containerWidth) {
+        donutContainer.html(donutChart.loadingState());
     }
 }
 
 // Show charts if container available
 if (d3Selection.select('.js-donut-chart-container').node()) {
-    createDonutChart(dataset);
+    createDonutChart();
     createSmallDonutChart();
     createDonutWithHighlightSliceChart();
+    createLoadingState();
 
-    var redrawCharts = function(){
+    redrawCharts = function(){
         d3Selection.selectAll('.donut-chart').remove();
 
-        createDonutChart(dataset);
+        createDonutChart();
         createSmallDonutChart();
         createDonutWithHighlightSliceChart();
+        createLoadingState();
     };
 
     // Redraw charts on window resize
     PubSub.subscribe('resize', redrawCharts);
 
     // Color schema selector
-    colorSelectorHelper.createColorSelector('.js-color-selector-container', '.donut-chart', createDonutChart.bind(null, dataset));
+    colorSelectorHelper.createColorSelector('.js-color-selector-container', '.donut-chart', createDonutChart);
 }

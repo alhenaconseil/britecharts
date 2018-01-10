@@ -120,6 +120,14 @@ define([
             it('should return specified number of decimal places', () => {
                 expect(common.calculatePercent(20, 100, '.2f')).toEqual('20.00');
             });
+
+            it('should return difference between dates', () => {
+                expect(common.diffDays('Thu Oct 05 2017', 'Thu Oct 04 2017')).toEqual(1);
+            });
+
+            it('should add a number of days to a date', () => {
+                expect(common.addDays('Thu Oct 05 2017', 1).slice(0, 15)).toEqual('Fri Oct 06 2017');
+            });
         });
 
         describe('export chart', () => {
@@ -234,7 +242,7 @@ define([
                     });
 
                     it('should give back a minor hour format and 5 ticks', () => {
-                        expect(minor.tick).toEqual(5);
+                        expect(typeof minor.tick).toEqual('function');
                         expect(minor.format.toString()).toEqual(hourFormat);
                     });
 
@@ -288,7 +296,7 @@ define([
                     });
 
                     it('should give back a minor minute format and 5 ticks', () => {
-                        expect(minor.tick).toEqual(5);
+                        expect(typeof minor.tick).toEqual('function');
                         expect(minor.format.toString()).toEqual(minuteFormat);
                     });
 
@@ -305,7 +313,7 @@ define([
                     });
 
                     it('should give back a minor hour format and 5 ticks', () => {
-                        expect(minor.tick).toEqual(5);
+                        expect(typeof minor.tick).toEqual('function');
                         expect(minor.format.toString()).toEqual(hourFormat);
                     });
 
@@ -322,7 +330,7 @@ define([
                     });
 
                     it('should give back a minor day format and 5 ticks', () => {
-                        expect(minor.tick).toEqual(5);
+                        expect(typeof minor.tick).toEqual('function');
                         expect(minor.format.toString()).toEqual(dayFormat);
                     });
 
@@ -339,7 +347,7 @@ define([
                     });
 
                     it('should give back a minor day format and 5 ticks', () => {
-                        expect(minor.tick).toEqual(5);
+                        expect(typeof minor.tick).toEqual('function');
                         expect(minor.format.toString()).toEqual(monthFormat);
                     });
 

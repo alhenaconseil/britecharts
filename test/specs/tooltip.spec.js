@@ -122,6 +122,66 @@ define(['jquery', 'd3', 'tooltip'], function($, d3, tooltip) {
                         ).toBe('Tooltip title - Aug 05, 12 AM');
                     });
                 });
+
+                describe('when date must not be shown', function() {
+
+                    it('should only show the title of the tooltip', () =>  {
+                        tooltipChart.shouldShowDateInTitle(false);
+
+                        tooltipChart.update({
+                            date: '2015-08-05T07:00:00.000Z',
+                            topics: []
+                        }, topicColorMap, 0);
+
+                        expect(
+                            containerFixture.select('.britechart-tooltip')
+                                .selectAll('.tooltip-title')
+                                .text()
+                        ).toBe('Tooltip title');
+                    });
+                });
+
+                // TODO: figure out how to avoid timezone issues
+                xdescribe('when title is set to blank', function() {
+
+                    it('should only show the date of the tooltip', () =>  {
+                        tooltipChart
+                            .title('')
+                            .dateFormat(tooltipChart.axisTimeCombinations.HOUR_DAY);
+
+                        tooltipChart.update({
+                            date: '2015-08-05T07:00:00.000Z',
+                            topics: []
+                        }, topicColorMap, 0);
+
+                        expect(
+                            containerFixture.select('.britechart-tooltip')
+                                .selectAll('.tooltip-title')
+                                .text()
+                        ).toBe('Aug 05, 07 AM');
+                    });
+                });
+
+                xdescribe('when custom date is to be used', function() {
+
+                    it('should support a custom date format', () =>  {
+                        tooltipChart
+                            .title('My Title')
+                            .dateFormat(tooltipChart.axisTimeCombinations.CUSTOM)
+                            .dateCustomFormat('%m/%d @ %H:%M %p');
+
+                        tooltipChart.update({
+                            date: '2015-08-05T07:00:00.000Z',
+                            topics: []
+                        }, topicColorMap, 0);
+
+                        expect(
+                            containerFixture.select('.britechart-tooltip')
+                                .selectAll('.tooltip-title')
+                                .text()
+                        ).toBe('My Title - 08/05 @ 07:00 AM');
+                    });
+                });
             });
 
             it('should add a line of text for each topic', () =>  {
@@ -359,6 +419,18 @@ define(['jquery', 'd3', 'tooltip'], function($, d3, tooltip) {
                 expect(newValueLabel).toBe(testValueLabel);
             });
 
+            it('should provide tooltipOffset getter and setter', () => {
+                let defaultTooltipOffset = tooltipChart.tooltipOffset(),
+                    testTooltipOffset = {x: 50, y: 50},
+                    newTooltipOffset;
+
+                tooltipChart.tooltipOffset(testTooltipOffset);
+                newTooltipOffset = tooltipChart.tooltipOffset();
+
+                expect(defaultTooltipOffset).not.toBe(testTooltipOffset);
+                expect(newTooltipOffset).toBe(testTooltipOffset);
+            });
+
             it('should provide topicLabel getter and setter', () => {
                 let defaultTopicLabel = tooltipChart.topicLabel(),
                     testTopicLabel = 'valueSet',
@@ -402,7 +474,8 @@ define(['jquery', 'd3', 'tooltip'], function($, d3, tooltip) {
                     MINUTE_HOUR: 'minute-hour',
                     HOUR_DAY: 'hour-daymonth',
                     DAY_MONTH: 'day-month',
-                    MONTH_YEAR: 'month-year'
+                    MONTH_YEAR: 'month-year',
+                    CUSTOM: 'custom'
                 });
             });
 
@@ -428,6 +501,18 @@ define(['jquery', 'd3', 'tooltip'], function($, d3, tooltip) {
 
                 expect(defaultOrder).not.toBe(testOrder);
                 expect(newOrder).toBe(testOrder);
+            });
+
+            it('should provide shouldShowDateInTitle getter and setter', () => {
+                let current = tooltipChart.shouldShowDateInTitle(),
+                    expected = false,
+                    actual;
+
+                tooltipChart.shouldShowDateInTitle(expected);
+                actual = tooltipChart.shouldShowDateInTitle();
+
+                expect(current).not.toBe(expected);
+                expect(actual).toBe(expected);
             });
         });
     });
