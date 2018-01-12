@@ -695,7 +695,7 @@ define(function(require){
          * @private
          */
         function prepareData(data) {
-            stacks = uniq(data.map(({stack}) => stack));
+            stacks = uniq(data.map(({stack}) => stack)).reverse();
             transformedData = d3Collection.nest()
                 .key(getName)
                 .rollup(function(values) {
