@@ -745,7 +745,6 @@ define(function(require) {
             return this;
         };
 
-
         /**
          * Gets or Sets the number format of the donut chart
          * @param  {string} _x Desired number format for the donut chart
