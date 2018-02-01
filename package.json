@@ -1,6 +1,6 @@
 {
   "name": "britecharts",
-  "version": "2.4.11",
+  "version": "2.4.12",
   "description": "D3.js based Modular Charting Library by Eventbrite",
   "main": "dist/bundled/britecharts.min.js",
   "contributors": [
@@ -61,6 +61,7 @@
   "dependencies": {
     "base-64": "^0.1.0",
     "d3": "^4.10.0",
+    "eslint-loader": "^1.9.0",
     "lodash.assign": "^4.2.0"
   },
   "devDependencies": {

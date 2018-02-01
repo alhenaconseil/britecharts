@@ -18,6 +18,7 @@ define(function(require){
     const colorHelper = require('./helpers/colors');
     const {bar} = require('./helpers/loadingStates');
 
+    const PERCENTAGE_FORMAT = '%';
     const NUMBER_FORMAT = ',f';
     const uniq = (arrArg) => arrArg.filter((elem, pos, arr) => arr.indexOf(elem) == pos);
 
@@ -493,7 +494,7 @@ define(function(require){
                         .classed('bar', true)
                         .attr('x', (d) => xScale(d.data.key))
                         .attr('y', (d) => yScale(d[1]))
-                        .attr('width', xScale.bandwidth )
+                        .attr('width', xScale.bandwidth );
 
             if (isAnimated) {
                 bars.style('opacity', barOpacity)
@@ -565,17 +566,13 @@ define(function(require){
          */
         function getNearestDataPoint(mouseX) {
             const adjustedMouseX = mouseX - margin.left;
-            const dataByValueParsed = transformedData.map((item) => {
-                    item.key = item.key
-                    return item;
-                });
 
-            const nearest = dataByValueParsed.find(({key}) => {
+            const nearest = transformedData.find(({key}) => {
                 const barStart = xScale(key);
                 const barEnd = barStart + xScale.bandwidth();
 
                 // If mouseX is between barStart & barEnd
-                return (adjustedMouseX >= barStart) && (adjustedMouseX < barEnd)
+                return (adjustedMouseX >= barStart) && (adjustedMouseX < barEnd);
             });
 
             return nearest;
@@ -588,16 +585,13 @@ define(function(require){
          */
         function getNearestDataPoint2(mouseY) {
             const adjustedMouseY = mouseY - margin.top;
-            const dataByValueParsed = transformedData.map((item) => {
-                item.key = item.key
-                return item;
-            });
-            const nearest = dataByValueParsed.find(({key}) => {
+
+            const nearest = transformedData.find(({key}) => {
                 const barStart = yScale(key);
                 const barEnd = barStart + yScale.bandwidth();
 
                 // If mouseY is between barStart & barEnd
-                return (adjustedMouseY >= barStart) && (adjustedMouseY < barEnd)
+                return (adjustedMouseY >= barStart) && (adjustedMouseY < barEnd);
             });
 
             return nearest;
@@ -817,6 +811,25 @@ define(function(require){
                 return grid;
             }
             grid = _x;
+
+            return this;
+        };
+
+        /**
+         * Gets or Sets the hasPercentage status
+         * @param  {boolean} _x     Should use percentage as value format
+         * @return { boolean | module} Is percentage used or Chart module to chain calls
+         * @public
+         */
+        exports.hasPercentage = function(_x) {
+            if (!arguments.length) {
+                return valueLabelFormat === PERCENTAGE_FORMAT;
+            }
+            if (_x) {
+                valueLabelFormat = PERCENTAGE_FORMAT;
+            } else {
+                valueLabelFormat = NUMBER_FORMAT;
+            }
 
             return this;
         };

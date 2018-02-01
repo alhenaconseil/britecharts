@@ -82,10 +82,9 @@ define(function(require){
             marginRatio = 1.5,
 
             valueReservedSpace = 40,
-            suffix = '',
             numberLetterSpacing = 0.8,
-            numberFormatSpecifier = 's',
-            numberFormat = d3Format.format(numberFormatSpecifier),
+            numberFormat = 's',
+            unit = '',
 
             isFadedClassName = 'is-faded',
             isHorizontal = false,
@@ -96,9 +95,7 @@ define(function(require){
 
             getId = ({id}) => id,
             getName = ({name}) => name,
-            getFormattedQuantity = ({quantity}) => {
-                return numberFormat(quantity) + ' ' + suffix;
-            },
+            getFormattedQuantity = ({quantity}) => d3Format.format(numberFormat)(quantity) + unit,
             getCircleFill = ({name}) => colorScale(name),
 
             entries,
@@ -507,6 +504,21 @@ define(function(require){
         };
 
         /**
+         * Gets or Sets the unit of the value
+         * @param  {boolean} _x Desired unit
+         * @return {boolean | module} Current unit or Legend module to chain calls
+         * @public
+         */
+        exports.unit = function(_x) {
+            if (!arguments.length) {
+                return unit;
+            }
+            unit = _x;
+
+            return this;
+        };
+
+        /**
          * Gets or Sets the number format of the legend chart
          * @param  {string} _x Desired number format for the legend chart
          * @return {numberFormat | module} Current number format or Legend module to chain calls
@@ -532,37 +544,6 @@ define(function(require){
                 return width;
             }
             width = _x;
-
-            return this;
-        };
-
-        /**
-         * Gets or Sets the suffix
-         * @param  {boolean} _x Desired suffix
-         * @return {boolean | module} Current suffix or Legend module to chain calls
-         * @public
-         */
-        exports.suffix = function(newSuffix) {
-            if (!arguments.length) {
-                return suffix;
-            }
-            suffix = newSuffix;
-
-            return this;
-        };
-
-        /**
-         * Gets or Sets the number format of the legend chart
-         * @param  {string} _x Desired d3 number format for the graph
-         * @return {string | module} Current d3 number format or Legend module to chain calls
-         * @public
-         */
-        exports.numberFormatSpecifier = function(specifier) {
-            if (!arguments.length) {
-                return numberFormatSpecifier;
-            }
-            numberFormatSpecifier = specifier;
-            numberFormat = d3Format.format(numberFormatSpecifier);
 
             return this;
         };
