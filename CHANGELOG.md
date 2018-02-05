@@ -1,4 +1,24 @@
-2.4.12
+2.5.0 - MINOR
+--------------
+* Feature - ability to reverse stacks (sound-matt)
+* Feature - allow ability to switch Bar's hover behavior (dalerasrorov-eb)
+* Eased compilation requirement for ESlint and updated CHANGELOG (dalerasrorov-eb)
+* Feature - added text formatter function to Donut's API (dalerasrorov-eb)
+
+2.4.12 - PATCH
+--------------
+* Added ESlint task to webpack for demos and added critical rules (dalerasrorov-eb)
+* Eliminated mutation of data in cleanData of the Line chart (dalerasrorov-eb)
+* Allow valueFormat to be an empty string  (sound-matt)
+* Feat: add possibility to precise the unit of the values in legend (sound-matt)
+* Fix: stackedbar get nearest datapoint (sound-matt)
+* Fix: stacked-bar no more choosing random color (sound-matt)
+* Stacked bar chart hasPercentage impl (dalerasrorov-eb)
+* Adding anchors to loading states and updating bar demo (Golodhros)
+* Updating changelog (Golodhros)
+* Replace .enablePercentageLabels with .enableLabels (mrbongiolo)
+* Removed .usePercentage for good from BarChart (mrbongiolo)
+* Feature - Added .numberFormat to MiniTooltip (mrbongiolo)
 
 2.4.11 - Minor
 --------------
