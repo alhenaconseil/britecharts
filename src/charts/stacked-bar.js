@@ -7,6 +7,7 @@ define(function(require){
     const d3Collection = require('d3-collection');
     const d3Dispatch = require('d3-dispatch');
     const d3Ease = require('d3-ease');
+    const d3Format = require('d3-format');
     const d3Interpolate = require('d3-interpolate');
     const d3Scale = require('d3-scale');
     const d3Shape = require('d3-shape');
@@ -17,6 +18,12 @@ define(function(require){
     const {exportChart} = require('./helpers/exportChart');
     const colorHelper = require('./helpers/colors');
     const {bar} = require('./helpers/loadingStates');
+
+    const {
+        formatIntegerValue,
+        formatDecimalValue,
+    } = require('./helpers/formatHelpers');
+    const {isInteger} = require('./helpers/common');
 
     const PERCENTAGE_FORMAT = '%';
     const NUMBER_FORMAT = ',f';
@@ -135,7 +142,7 @@ define(function(require){
             valueLabel = 'value',
             stackLabel = 'stack',
             nameLabelFormat,
-            valueLabelFormat = NUMBER_FORMAT,
+            valueLabelFormat,
 
             // getters
             getName = (data) =>  data[nameLabel],
@@ -194,6 +201,27 @@ define(function(require){
         }
 
         /**
+         * Formats the value depending on its characteristics
+         * @param  {Number} value Value to format
+         * @return {Number}       Formatted value
+         */
+        function getFormattedValue(value) {
+            let format;
+
+            if (isInteger(value)) {
+                format = formatIntegerValue;
+            } else {
+                format = formatDecimalValue;
+            }
+
+            if (valueLabelFormat) {
+                format = d3Format.format(valueLabelFormat)
+            }
+
+            return format(value);
+        }
+
+        /**
          * Adjusts the position of the y axis' ticks
          * @param  {D3Selection} selection Y axis group
          * @return void
@@ -210,12 +238,15 @@ define(function(require){
         function buildAxis() {
             if (isHorizontal) {
                 xAxis = d3Axis.axisBottom(xScale)
-                    .ticks(xTicks, valueLabelFormat);
-                yAxis = d3Axis.axisLeft(yScale)
+                    .ticks(xTicks)
+                    .tickFormat(getFormattedValue);
+                yAxis = d3Axis.axisLeft(yScale);
+
             } else {
-                xAxis = d3Axis.axisBottom(xScale)
+                xAxis = d3Axis.axisBottom(xScale);
                 yAxis = d3Axis.axisLeft(yScale)
-                    .ticks(yTicks, valueLabelFormat)
+                    .ticks(yTicks)
+                    .tickFormat(getFormattedValue);
             }
         }
 
@@ -951,7 +982,7 @@ define(function(require){
             return this;
         };
 
-        /**
+                /**
          * Gets or Sets the valueLabelFormat of the chart
          * @param  {String[]} _x Desired valueLabelFormat for the graph
          * @return { valueLabelFormat | module} Current valueLabelFormat or Chart module to chain calls
